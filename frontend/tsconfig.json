@@ -6,7 +6,6 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "lib": ["esnext", "dom", "dom.iterable"],
-    "baseUrl": ".",
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",

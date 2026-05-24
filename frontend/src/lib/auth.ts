@@ -41,8 +41,7 @@ export function setSession(token: string, user: StoredUser): void {
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  localStorage.clear();
   notify();
 }
 

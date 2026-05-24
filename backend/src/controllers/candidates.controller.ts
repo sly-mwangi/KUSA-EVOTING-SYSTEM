@@ -9,9 +9,13 @@ import {
   pollSeatsTable,
   endorsementsTable,
   electionApplicationSettingsTable,
+  usersTable,
+  coursesTable,
+  departmentsTable,
+  votesTable,
 } from "@workspace/db";
-import { and, desc, eq } from "drizzle-orm";
-import { audit } from "../lib/audit";
+import { and, desc, eq, count } from "drizzle-orm";
+import { audit } from "../lib/audit.js";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -32,7 +36,7 @@ export async function applyCandidate(req: Request, res: Response) {
   const pollRows = await db
     .select()
     .from(pollsTable)
-    .where(eq(pollsTable.id, pollId))
+    .where(eq(pollsTable.id, pollId as string))
     .limit(1);
   const poll = pollRows[0];
   if (!poll) {
@@ -42,23 +46,21 @@ export async function applyCandidate(req: Request, res: Response) {
   const appSettings = await db
     .select()
     .from(electionApplicationSettingsTable)
-    .where(eq(electionApplicationSettingsTable.pollId, pollId))
+    .where(eq(electionApplicationSettingsTable.pollId, pollId as string))
     .limit(1);
   const settings = appSettings[0];
   if (!settings || !settings.isOpen) {
-    res
-      .status(400)
-      .json({
-        message:
-          "The application window for this poll is currently closed. Please wait until the admin opens it.",
-      });
+    res.status(400).json({
+      message:
+        "The application window for this poll is currently closed. Please wait until the admin opens it.",
+    });
     return;
   }
   if (settings.closeAt && new Date() > settings.closeAt) {
     await db
       .update(electionApplicationSettingsTable)
       .set({ isOpen: false })
-      .where(eq(electionApplicationSettingsTable.pollId, pollId));
+      .where(eq(electionApplicationSettingsTable.pollId, pollId as string));
     res.status(400).json({ message: "The application window has expired." });
     return;
   }
@@ -66,7 +68,10 @@ export async function applyCandidate(req: Request, res: Response) {
     .select()
     .from(pollSeatsTable)
     .where(
-      and(eq(pollSeatsTable.id, seatId), eq(pollSeatsTable.pollId, pollId)),
+      and(
+        eq(pollSeatsTable.id, seatId as string),
+        eq(pollSeatsTable.pollId, pollId as string),
+      ),
     )
     .limit(1);
   const seat = seatRows[0];
@@ -108,19 +113,15 @@ export async function applyCandidate(req: Request, res: Response) {
     seat.scopeRefId &&
     user?.hostelId !== seat.scopeRefId
   ) {
-    res
-      .status(403)
-      .json({
-        message: "You can only apply for seats within your assigned hostel",
-      });
+    res.status(403).json({
+      message: "You can only apply for seats within your assigned hostel",
+    });
     return;
   }
   if (seat.scope === "non-residential" && user?.hostelId !== null) {
-    res
-      .status(403)
-      .json({
-        message: "Only non-residential students can apply for this seat",
-      });
+    res.status(403).json({
+      message: "Only non-residential students can apply for this seat",
+    });
     return;
   }
   if (seat.scope === "residential" && user?.hostelId === null) {
@@ -143,6 +144,77 @@ export async function applyCandidate(req: Request, res: Response) {
     res.status(409).json({ message: "You have already applied for this seat" });
     return;
   }
+
+  // SGC Eligibility Check: Only winners of other polls can participate in SGC elections
+  if (poll.pollType === "sgc") {
+    // 1. Find all closed polls (excluding current)
+    const closedPolls = await db
+      .select({ id: pollsTable.id })
+      .from(pollsTable)
+      .where(and(eq(pollsTable.locked, true), desc(pollsTable.endDate)));
+
+    let isWinner = false;
+    for (const p of closedPolls) {
+      // 2. Get results for each closed poll
+      const seats = await db
+        .select({ id: pollSeatsTable.id })
+        .from(pollSeatsTable)
+        .where(eq(pollSeatsTable.pollId, p.id));
+
+      for (const s of seats) {
+        const candidates = await db
+          .select({ id: candidatesTable.id, userId: candidatesTable.userId })
+          .from(candidatesTable)
+          .where(
+            and(
+              eq(candidatesTable.seatId, s.id),
+              eq(candidatesTable.status, "approved"),
+            ),
+          );
+
+        const counts = await Promise.all(
+          candidates.map(async (c) => {
+            const r = await db
+              .select({ n: count() })
+              .from(votesTable)
+              .where(
+                and(
+                  eq(votesTable.seatId, s.id),
+                  eq(votesTable.candidateId, c.id),
+                ),
+              );
+            return {
+              id: c.id,
+              userId: c.userId,
+              votes: Number(r[0]?.n ?? 0),
+            };
+          }),
+        );
+
+        const winner = counts.length
+          ? counts.reduce(
+              (best, c) => (c.votes > best.votes ? c : best),
+              counts[0],
+            )
+          : null;
+
+        if (winner && winner.votes > 0 && winner.userId === req.user!.id) {
+          isWinner = true;
+          break;
+        }
+      }
+      if (isWinner) break;
+    }
+
+    if (!isWinner) {
+      res.status(403).json({
+        message:
+          "Only winners of previous elections are eligible to apply for SGC positions.",
+      });
+      return;
+    }
+  }
+
   const inserted = await db
     .insert(candidatesTable)
     .values({
@@ -181,7 +253,7 @@ export async function uploadCandidateDocument(req: Request, res: Response) {
     .from(candidatesTable)
     .where(
       and(
-        eq(candidatesTable.id, candidateId),
+        eq(candidatesTable.id, candidateId as string),
         eq(candidatesTable.userId, req.user!.id),
       ),
     )
@@ -199,18 +271,26 @@ export async function uploadCandidateDocument(req: Request, res: Response) {
   const inserted = await db
     .insert(candidateDocumentsTable)
     .values({
-      candidateId,
-      documentName,
+      candidateId: candidateId as string,
+      documentName: documentName as string,
       documentUrl,
-      documentType: documentType ?? "document",
+      documentType: (documentType as string) ?? "document",
     })
     .returning();
+
+  if (documentType === "photo") {
+    await db
+      .update(candidatesTable)
+      .set({ photoUrl: documentUrl })
+      .where(eq(candidatesTable.id, candidateId as string));
+  }
+
   await audit({
     action: "candidate.upload_document",
     actorEmail: req.user!.email,
     actorRole: "student",
-    target: candidateId,
-    details: documentName,
+    target: candidateId as string,
+    details: documentName as string,
   });
   res
     .status(201)
@@ -276,7 +356,7 @@ export async function endorseCandidate(req: Request, res: Response) {
   const candRows = await db
     .select()
     .from(candidatesTable)
-    .where(eq(candidatesTable.id, candidateId))
+    .where(eq(candidatesTable.id, candidateId as string))
     .limit(1);
   const candidate = candRows[0];
   if (!candidate) {
@@ -288,7 +368,7 @@ export async function endorseCandidate(req: Request, res: Response) {
     .from(endorsementsTable)
     .where(
       and(
-        eq(endorsementsTable.seatId, candidate.seatId),
+        eq(endorsementsTable.seatId, candidate.seatId as string),
         eq(endorsementsTable.voterId, req.user!.id),
       ),
     )
@@ -300,7 +380,7 @@ export async function endorseCandidate(req: Request, res: Response) {
     return;
   }
   await db.insert(endorsementsTable).values({
-    candidateId,
+    candidateId: candidateId as string,
     seatId: candidate.seatId,
     voterId: req.user!.id,
   });
@@ -308,7 +388,7 @@ export async function endorseCandidate(req: Request, res: Response) {
     action: "candidate.endorse",
     actorEmail: req.user!.email,
     actorRole: "student",
-    target: candidateId,
+    target: candidateId as string,
   });
   res.json({ message: "Endorsement recorded" });
 }
@@ -318,7 +398,7 @@ export async function getApplicationSettings(req: Request, res: Response) {
   const rows = await db
     .select()
     .from(electionApplicationSettingsTable)
-    .where(eq(electionApplicationSettingsTable.pollId, pollId))
+    .where(eq(electionApplicationSettingsTable.pollId, pollId as string))
     .limit(1);
   if (!rows[0]) {
     res.json({

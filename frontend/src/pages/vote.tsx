@@ -6,14 +6,31 @@ import {
   getGetPollDetailsQueryKey,
   getListPollsQueryKey,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, Vote, ShieldCheck, CheckCircle2, Lock, TriangleAlert, X } from "lucide-react";
+import {
+  Loader2,
+  Vote,
+  ShieldCheck,
+  CheckCircle2,
+  Lock,
+  TriangleAlert,
+  X,
+  User,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -37,7 +54,10 @@ export default function VotePage() {
   const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { data: poll, isLoading } = useGetPollDetails(pollId, {
-    query: { enabled: Boolean(pollId), queryKey: getGetPollDetailsQueryKey(pollId) },
+    query: {
+      enabled: Boolean(pollId),
+      queryKey: getGetPollDetailsQueryKey(pollId) as unknown as unknown[],
+    },
   });
   const cast = useCastVote();
   const [selections, setSelections] = useState<Record<string, string>>({});
@@ -45,15 +65,24 @@ export default function VotePage() {
   const [feeBlocked, setFeeBlocked] = useState(false);
 
   const eligibleSeats = useMemo(
-    () => (poll?.seats ?? []).filter((s: any) => s.eligible && !s.voted),
+    () =>
+      ((poll as any)?.seats ?? []).filter((s: any) => s.eligible && !s.voted),
     [poll],
   );
 
   if (isLoading) {
-    return <div className="container mx-auto p-8"><div className="h-64 animate-pulse rounded-xl bg-muted/40" /></div>;
+    return (
+      <div className="container mx-auto p-8">
+        <div className="h-64 animate-pulse rounded-xl bg-muted/40" />
+      </div>
+    );
   }
   if (!poll) {
-    return <div className="container mx-auto p-8 text-center text-muted-foreground">Poll not found</div>;
+    return (
+      <div className="container mx-auto p-8 text-center text-muted-foreground">
+        Poll not found
+      </div>
+    );
   }
 
   const onSubmit = async () => {
@@ -91,11 +120,20 @@ export default function VotePage() {
   if (submitted) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
-        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200 }} className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-primary text-primary-foreground">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", stiffness: 200 }}
+          className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-primary text-primary-foreground"
+        >
           <CheckCircle2 className="h-10 w-10" />
         </motion.div>
-        <h1 className="mt-6 text-3xl font-bold">Your vote has been recorded successfully</h1>
-        <p className="mt-2 text-muted-foreground">Returning to your dashboard…</p>
+        <h1 className="mt-6 text-3xl font-bold">
+          Your vote has been recorded successfully
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          Returning to your dashboard…
+        </p>
       </div>
     );
   }
@@ -103,9 +141,20 @@ export default function VotePage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8 max-w-3xl">
-        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">{poll.status === "active" ? "Voting open" : poll.status}</Badge>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">{poll.title}</h1>
-        <p className="mt-1 text-muted-foreground">{poll.description}</p>
+        <Badge
+          variant="outline"
+          className="bg-primary/10 text-primary border-primary/30"
+        >
+          {(poll as any).status === "active"
+            ? "Voting open"
+            : (poll as any).status}
+        </Badge>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">
+          {(poll as any).title}
+        </h1>
+        <p className="mt-1 text-muted-foreground">
+          {(poll as any).description}
+        </p>
 
         {/* Fee clearance blocked banner */}
         <AnimatePresence>
@@ -121,11 +170,14 @@ export default function VotePage() {
                 <TriangleAlert className="h-4 w-4 text-destructive" />
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <AlertTitle className="text-destructive font-semibold">Fee balance not cleared</AlertTitle>
+                    <AlertTitle className="text-destructive font-semibold">
+                      Fee balance not cleared
+                    </AlertTitle>
                     <AlertDescription className="text-destructive/80 mt-1">
-                      Your student fee balance must be cleared before you can vote. Please visit the
-                      {" "}<span className="font-medium">Finance Office</span>{" "}
-                      to settle your balance, then return here to cast your vote.
+                      Your student fee balance must be cleared before you can
+                      vote. Please visit the{" "}
+                      <span className="font-medium">Finance Office</span> to
+                      settle your balance, then return here to cast your vote.
                     </AlertDescription>
                   </div>
                   <button
@@ -146,31 +198,47 @@ export default function VotePage() {
           <ShieldCheck className="h-4 w-4 text-primary" />
           <AlertTitle>Your ballot is secret and final</AlertTitle>
           <AlertDescription className="text-xs">
-            Votes are wrapped in an encrypted envelope before leaving your device. Once submitted, a seat cannot be voted on again.
+            Votes are wrapped in an encrypted envelope before leaving your
+            device. Once submitted, a seat cannot be voted on again.
           </AlertDescription>
         </Alert>
       </div>
 
       {eligibleSeats.length === 0 ? (
-        <Card className="max-w-3xl"><CardContent className="p-8 text-center text-sm text-muted-foreground">There are no seats currently open for you to vote on in this poll.</CardContent></Card>
+        <Card className="max-w-3xl">
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
+            There are no seats currently open for you to vote on in this poll.
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid max-w-3xl gap-6">
           {eligibleSeats.map((seat: any, idx: number) => (
-            <motion.div key={seat.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: idx * 0.05 }}>
+            <motion.div
+              key={seat.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: idx * 0.05 }}
+            >
               <Card className="border-border/80">
                 <CardHeader>
                   <CardTitle className="text-xl">{seat.label}</CardTitle>
                   <CardDescription>
-                    {seat.candidates.length} approved candidate{seat.candidates.length === 1 ? "" : "s"}. Pick one — or skip.
+                    {seat.candidates.length} approved candidate
+                    {seat.candidates.length === 1 ? "" : "s"}. Pick one — or
+                    skip.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {seat.candidates.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">No approved candidates yet for this seat.</div>
+                    <div className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                      No approved candidates yet for this seat.
+                    </div>
                   ) : (
                     <RadioGroup
                       value={selections[seat.id] ?? ""}
-                      onValueChange={(v) => setSelections((s) => ({ ...s, [seat.id]: v }))}
+                      onValueChange={(v) =>
+                        setSelections((s) => ({ ...s, [seat.id]: v }))
+                      }
                       className="grid gap-3"
                     >
                       {seat.candidates.map((c: any) => {
@@ -178,15 +246,36 @@ export default function VotePage() {
                         return (
                           <Label
                             key={c.id}
+                            data-testid={`candidate-${c.id}`}
                             htmlFor={`${seat.id}-${c.id}`}
                             className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-all ${checked ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/40"}`}
                           >
-                            <RadioGroupItem value={c.id} id={`${seat.id}-${c.id}`} className="mt-0.5" />
-                            <div className="flex-1">
-                              <div className="font-semibold">{c.name}</div>
-                              <p className="mt-1 text-sm text-muted-foreground">{c.manifesto || "No manifesto provided."}</p>
+                            <RadioGroupItem
+                              value={c.id}
+                              id={`${seat.id}-${c.id}`}
+                              className="mt-0.5"
+                            />
+                            <div className="flex flex-1 items-start gap-4">
+                              <Avatar className="h-12 w-12 border border-border">
+                                <AvatarImage
+                                  src={c.photoUrl}
+                                  alt={c.name}
+                                  className="object-cover"
+                                />
+                                <AvatarFallback className="bg-primary/10 text-primary">
+                                  <User className="h-6 w-6" />
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                <div className="font-semibold">{c.name}</div>
+                                <p className="mt-1 text-sm text-muted-foreground line-clamp-3">
+                                  {c.manifesto || "No manifesto provided."}
+                                </p>
+                              </div>
                             </div>
-                            {checked && <CheckCircle2 className="h-5 w-5 text-primary" />}
+                            {checked && (
+                              <CheckCircle2 className="h-5 w-5 text-primary" />
+                            )}
                           </Label>
                         );
                       })}
@@ -196,7 +285,13 @@ export default function VotePage() {
                 <CardFooter className="justify-between gap-2 text-xs text-muted-foreground">
                   <span>Choosing nothing skips this seat.</span>
                   {selections[seat.id] && (
-                    <button type="button" onClick={() => setSelections(({ [seat.id]: _, ...rest }) => rest)} className="text-primary hover:underline">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelections(({ [seat.id]: _, ...rest }) => rest)
+                      }
+                      className="text-primary hover:underline"
+                    >
                       Clear selection
                     </button>
                   )}
@@ -208,12 +303,29 @@ export default function VotePage() {
             <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
               <div className="flex items-center gap-2 text-sm">
                 <Lock className="h-4 w-4 text-primary" />
-                <span>{Object.keys(selections).length} of {eligibleSeats.length} seats selected</span>
+                <span>
+                  {Object.keys(selections).length} of {eligibleSeats.length}{" "}
+                  seats selected
+                </span>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => navigate("/dashboard")}>Cancel</Button>
-                <Button onClick={onSubmit} disabled={cast.isPending} className="gap-2 px-6">
-                  {cast.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Vote className="h-4 w-4" />}
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/dashboard")}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="vote-btn"
+                  onClick={onSubmit}
+                  disabled={cast.isPending}
+                  className="gap-2 px-6"
+                >
+                  {cast.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Vote className="h-4 w-4" />
+                  )}
                   Submit ballot
                 </Button>
               </div>

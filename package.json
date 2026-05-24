@@ -2,5 +2,8 @@
   "name": "kuvote-workspace",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@10.26.1"
+  "packageManager": "pnpm@10.26.1",
+  "dependencies": {
+    "selenium-webdriver": "^4.44.0"
+  }
 }

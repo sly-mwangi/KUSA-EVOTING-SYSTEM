@@ -1,19 +1,7 @@
--- ============================================================
---  KUVOTE — Kenyatta University Student E-Voting System
---  Complete Database Schema + Sample Data
---  Generated: 2026-05-09
--- ============================================================
 
--- Create database (run as superuser outside a transaction if needed)
--- CREATE DATABASE kuvote;
--- \c kuvote;
-
--- Enable UUID generation
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- ============================================================
---  DROP EXISTING TABLES (in dependency order)
--- ============================================================
+
 DROP TABLE IF EXISTS audit_log              CASCADE;
 DROP TABLE IF EXISTS votes                  CASCADE;
 DROP TABLE IF EXISTS ballot_tokens          CASCADE;
@@ -189,7 +177,6 @@ INSERT INTO hostels (id, name, zone, gender) VALUES
 
 -- ============================================================
 --  5. STUDENT RECORDS
---     This is the authoritative university database.
 --     Registration number is the PRIMARY KEY.
 --     Only students in this table with fee_balance = 0 may register.
 -- ============================================================
@@ -208,9 +195,7 @@ CREATE TABLE student_records (
 );
 
 -- ── 30 Sample Student Records ──────────────────────────────
--- Email format: <student_number>.<year>@students.ku.ac.ke
--- fee_balance = 0.00  →  eligible to register
--- fee_balance > 0     →  blocked (must clear fees first)
+
 
 INSERT INTO student_records
     fee_balance         NUMERIC(10,2) NOT NULL DEFAULT 0.00,
@@ -218,9 +203,7 @@ INSERT INTO student_records
 );
 
 -- ── 30 Sample Student Records ──────────────────────────────
--- Email format: <student_number>.<year>@students.ku.ac.ke
--- fee_balance = 0.00  →  eligible to register
--- fee_balance > 0     →  blocked (must clear fees first)
+
 
 INSERT INTO student_records
     (registration_number, name, email, gender, school_id, department_id, course_id, hostel_id, year_of_study, fee_balance)
@@ -278,7 +261,7 @@ CREATE TABLE users (
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Default admin account (password: Admin123 — change on first login)
+-- Default admin account (password: Admin123)
 -- Password hash below is bcrypt of "Admin123"
 INSERT INTO users (name, email, password_hash, role, status)
 VALUES (

@@ -1,8 +1,4 @@
--- ============================================================
-  --  COURSE USERS: 30 students per each of the 101 original courses
-  --  Total rows : 3060
-  --  Password   : Student123
-  -- ============================================================
+
   INSERT INTO users (
     id, name, email, password_hash, role, status,
     gender, course_id, hostel_id, registration_number,

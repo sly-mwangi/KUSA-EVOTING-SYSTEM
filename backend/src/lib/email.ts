@@ -1,21 +1,31 @@
 import nodemailer from "nodemailer";
-import { logger } from "./logger";
+import { logger } from "./logger.js";
 
 const SMTP_HOST = process.env["SMTP_HOST"];
 const SMTP_PORT = Number(process.env["SMTP_PORT"] ?? "587");
 const SMTP_USER = process.env["SMTP_USER"];
 const SMTP_PASS = process.env["SMTP_PASS"];
-const SMTP_FROM = process.env["SMTP_FROM"] ?? SMTP_USER ?? "noreply@kuvote.ku.ac.ke";
+const SMTP_FROM = process.env["SMTP_FROM"] ?? "noreply@kuvote.ku.ac.ke";
 const SMTP_FROM_NAME = process.env["SMTP_FROM_NAME"] ?? "KUVOTE – KU Elections";
+
+const MAILTRAP_USER = process.env["MAILTRAP_USER"];
+const MAILTRAP_PASS = process.env["MAILTRAP_PASS"];
 
 const SENDGRID_API_KEY = process.env["SENDGRID_API_KEY"];
 const SENDGRID_FROM = process.env["SENDGRID_FROM"] ?? "noreply@kuvote.ku.ac.ke";
 
 export function isEmailConfigured(): boolean {
-  return Boolean((SMTP_HOST && SMTP_USER && SMTP_PASS) || SENDGRID_API_KEY);
+  return Boolean(
+    (SMTP_HOST && SMTP_USER && SMTP_PASS) ||
+    (MAILTRAP_USER && MAILTRAP_PASS) ||
+    SENDGRID_API_KEY,
+  );
 }
 
-function buildOtpHtml(otp: string, purpose: "registration" | "password_reset"): string {
+function buildOtpHtml(
+  otp: string,
+  purpose: "registration" | "password_reset",
+): string {
   const heading =
     purpose === "registration"
       ? "Verify your KUVOTE account"
@@ -90,21 +100,43 @@ async function sendViaSMTP(payload: {
   subject: string;
   text: string;
   html?: string;
+  config?: { host: string; port: number; user: string; pass: string };
 }): Promise<void> {
+  const host = payload.config?.host ?? SMTP_HOST;
+  const port = payload.config?.port ?? SMTP_PORT;
+  const user = payload.config?.user ?? SMTP_USER;
+  const pass = payload.config?.pass ?? SMTP_PASS;
+
   const transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+    connectionTimeout: 10000, // 10 seconds
   });
 
-  await transporter.sendMail({
-    from: `"${SMTP_FROM_NAME}" <${SMTP_FROM}>`,
-    to: payload.to,
-    subject: payload.subject,
-    text: payload.text,
-    html: payload.html,
-  });
+  try {
+    await transporter.verify();
+    await transporter.sendMail({
+      from: `"${SMTP_FROM_NAME}" <${SMTP_FROM}>`,
+      to: payload.to,
+      subject: payload.subject,
+      text: payload.text,
+      html: payload.html,
+    });
+  } catch (error: any) {
+    logger.error(
+      {
+        error: error.message,
+        code: error.code,
+        host,
+        port,
+        user: user ? "set" : "not set",
+      },
+      "SMTP Error Details",
+    );
+    throw error;
+  }
 }
 
 async function sendViaSendGrid(payload: {
@@ -131,7 +163,10 @@ async function sendViaSendGrid(payload: {
   });
   if (!res.ok) {
     const body = await res.text();
-    logger.error({ status: res.status, body, to: payload.to }, "SendGrid email failed");
+    logger.error(
+      { status: res.status, body, to: payload.to },
+      "SendGrid email failed",
+    );
     throw new Error(`SendGrid error: ${res.status}`);
   }
 }
@@ -142,20 +177,51 @@ export async function sendEmail(payload: {
   text: string;
   html?: string;
 }): Promise<void> {
+  // 1. Try Mailtrap first if configured
+  if (MAILTRAP_USER && MAILTRAP_PASS) {
+    await sendViaSMTP({
+      ...payload,
+      config: {
+        host: "sandbox.smtp.mailtrap.io",
+        port: 2525,
+        user: MAILTRAP_USER,
+        pass: MAILTRAP_PASS,
+      },
+    });
+    logger.info(
+      { to: payload.to, subject: payload.subject },
+      "Email sent via Mailtrap",
+    );
+    return;
+  }
+
+  // 2. Try custom SMTP
   if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
     await sendViaSMTP(payload);
-    logger.info({ to: payload.to, subject: payload.subject }, "Email sent via SMTP");
+    logger.info(
+      { to: payload.to, subject: payload.subject },
+      "Email sent via SMTP",
+    );
     return;
   }
 
+  // 3. Try SendGrid
   if (SENDGRID_API_KEY) {
     await sendViaSendGrid(payload);
-    logger.info({ to: payload.to, subject: payload.subject }, "Email sent via SendGrid");
+    logger.info(
+      { to: payload.to, subject: payload.subject },
+      "Email sent via SendGrid",
+    );
     return;
   }
 
-  logger.warn({ to: payload.to, subject: payload.subject }, "No email provider configured — logging OTP to console (dev mode)");
-  logger.info({ to: payload.to, subject: payload.subject, body: payload.text }, "OUTGOING EMAIL (DEV)");
+  logger.error(
+    { to: payload.to, subject: payload.subject },
+    "CRITICAL: No email provider configured. OTP cannot be sent.",
+  );
+  throw new Error(
+    "Email service is not configured. Please set up Mailtrap or SMTP.",
+  );
 }
 
 export async function sendOtpEmail(

@@ -1,8 +1,4 @@
--- ============================================================
-  --  HOSTEL USERS: 30 students per each of the 29 original KU hostels
-  --  Total rows : 870
-  --  Password   : Student123
-  -- ============================================================
+
   INSERT INTO users (
     id, name, email, password_hash, role, status,
     gender, course_id, hostel_id, registration_number,

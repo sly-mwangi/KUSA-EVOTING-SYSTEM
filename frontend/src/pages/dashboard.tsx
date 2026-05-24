@@ -16,15 +16,14 @@ import { CalendarClock, CheckCircle2, Vote, BarChart3 } from "lucide-react";
 function fmt(d: string) {
   // Manual Wall-Clock Fix: Add 3 hours to the stored UTC time to get the original EAT input
   const date = new Date(d);
-  const eat = new Date(date.getTime() + 3 * 60 * 60 * 1000);
-  return eat.toLocaleString("en-GB", {
+  return date.toLocaleString("en-GB", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
-    timeZone: "UTC", // Use UTC to prevent browser from adding its own offset
+    timeZone: "Africa/Nairobi",
   });
 }
 

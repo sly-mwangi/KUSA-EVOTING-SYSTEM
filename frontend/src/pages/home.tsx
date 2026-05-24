@@ -63,11 +63,14 @@ export default function Home() {
   const publicPolls = useListActivePollsPublic({
     query: {
       enabled: !isAuthenticated,
-      queryKey: getListActivePollsPublicQueryKey(),
+      queryKey: getListActivePollsPublicQueryKey() as unknown as unknown[],
     },
   });
   const userPolls = useListPolls({
-    query: { enabled: isAuthenticated, queryKey: getListPollsQueryKey() },
+    query: {
+      enabled: isAuthenticated,
+      queryKey: getListPollsQueryKey() as unknown as unknown[],
+    },
   });
   const polls = (
     (isAuthenticated
@@ -84,7 +87,7 @@ export default function Home() {
 
   return (
     <div>
-      <section className="relative overflow-hidden border-b border-border bg-gradient-to-br from-secondary via-secondary to-secondary/90 text-secondary-foreground">
+      <section className="relative overflow-hidden border-b border-border bg-linear-to-br from-secondary via-secondary to-secondary/90 text-secondary-foreground">
         <div className="absolute inset-0 opacity-20" aria-hidden>
           <div className="absolute -top-24 left-1/3 h-96 w-96 rounded-full bg-primary blur-3xl" />
           <div className="absolute -bottom-32 right-10 h-96 w-96 rounded-full bg-chart-3 blur-3xl" />

@@ -27,11 +27,23 @@ export default function AdminLoginPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const formattedEmail = email.trim().toLowerCase();
+
     try {
-      const r = (await mut.mutateAsync({ data: { email, password } })) as any;
+      const r = (await mut.mutateAsync({
+        data: { email: formattedEmail, password },
+      })) as any;
+
       if (r?.token && r?.user) {
         login(r.token, r.user);
         toast.success("Welcome to the admin console");
+
+        // 1. Flush credential states immediately before unmounting/routing
+        setEmail("");
+        setPassword("");
+
+        // 2. Safely trigger dashboard redirect
         navigate("/admin/dashboard");
       }
     } catch (err: any) {
@@ -65,29 +77,41 @@ export default function AdminLoginPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={onSubmit} className="space-y-4">
+              <form
+                id="admin-login-form"
+                onSubmit={onSubmit}
+                className="space-y-4"
+              >
                 <div className="space-y-2">
-                  <Label htmlFor="email">Admin Email</Label>
+                  <Label htmlFor="admin-email">Admin Email</Label>
                   <Input
-                    id="email"
+                    id="admin-email"
+                    name="admin-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="admin@ku.ac.ke"
+                    autoComplete="username"
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="admin-password">Password</Label>
                   <Input
-                    id="password"
+                    id="admin-password"
+                    name="admin-password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                     required
                   />
                 </div>
-                <Button className="w-full gap-2" disabled={mut.isPending}>
+                <Button
+                  type="submit"
+                  className="w-full gap-2"
+                  disabled={mut.isPending}
+                >
                   {mut.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (

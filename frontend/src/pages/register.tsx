@@ -117,7 +117,6 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [otpCode, setOtpCode] = useState("");
-  const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
   const [prefillData, setPrefillData] = useState<PrefillData | null>(null);
   const [prefillLoading, setPrefillLoading] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState("");
@@ -207,7 +206,6 @@ export default function RegisterPage() {
           hostelId: prefillData?.hostelId || undefined,
         } as any,
       })) as any;
-      setDevOtpHint(r?.devOtp ?? null);
       setRegisteredEmail(r?.email ?? prefillData?.suggestedEmail ?? "");
       toast.success("Verification code sent to your university email");
       setStep("otp");
@@ -253,8 +251,7 @@ export default function RegisterPage() {
   const handleResend = async () => {
     const email = registeredEmail || prefillData?.suggestedEmail || "";
     try {
-      const r = (await resend.mutateAsync({ data: { email } })) as any;
-      setDevOtpHint(r?.devOtp ?? null);
+      await resend.mutateAsync({ data: { email } });
       toast.success("New code sent");
     } catch (err: any) {
       toast.error(err?.message ?? "Could not resend code");
@@ -658,14 +655,6 @@ export default function RegisterPage() {
                       </InputOTPGroup>
                     </InputOTP>
                   </div>
-                  {devOtpHint && (
-                    <div className="rounded-md border border-dashed border-chart-3/40 bg-chart-3/10 p-3 text-center text-xs text-muted-foreground">
-                      Email service not configured. Dev OTP:{" "}
-                      <span className="font-mono font-bold text-foreground">
-                        {devOtpHint}
-                      </span>
-                    </div>
-                  )}
                   <Button
                     type="submit"
                     className="w-full"

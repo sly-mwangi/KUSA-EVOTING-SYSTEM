@@ -8,6 +8,7 @@ import {
   candidateDocumentsTable,
   electionApplicationSettingsTable,
   votesTable,
+  endorsementsTable,
   ballotTokensTable,
   auditLogTable,
   schoolsTable,
@@ -15,7 +16,16 @@ import {
   coursesTable,
   hostelsTable,
 } from "@workspace/db";
-import { and, count, desc, eq, gte, lte, isNotNull } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  lte,
+  isNotNull,
+  inArray,
+} from "drizzle-orm";
 import { hashPassword } from "../lib/auth.js";
 import { audit } from "../lib/audit.js";
 
@@ -227,36 +237,64 @@ export async function updatePoll(req: Request, res: Response) {
 
 export async function deletePoll(req: Request, res: Response) {
   const { pollId } = req.params;
-  await db
-    .delete(candidateDocumentsTable)
-    .where(
-      eq(
-        candidateDocumentsTable.candidateId,
-        db
-          .select({ id: candidatesTable.id })
-          .from(candidatesTable)
-          .where(eq(candidatesTable.pollId, pollId as string))
-          .limit(1) as any,
-      ),
-    )
-    .catch(() => {});
-  await db
-    .delete(candidatesTable)
-    .where(eq(candidatesTable.pollId, pollId as string));
-  await db
-    .delete(pollSeatsTable)
-    .where(eq(pollSeatsTable.pollId, pollId as string));
-  await db
-    .delete(electionApplicationSettingsTable)
-    .where(eq(electionApplicationSettingsTable.pollId, pollId as string));
-  await db.delete(pollsTable).where(eq(pollsTable.id, pollId as string));
-  await audit({
-    action: "admin.delete_poll",
-    actorEmail: req.user!.email,
-    actorRole: "admin",
-    target: pollId as string,
-  });
-  res.json({ message: "Poll deleted" });
+  const id = pollId as string;
+
+  try {
+ 
+
+    // 1. Get all candidate IDs for this poll
+    const candidates = await db
+      .select({ id: candidatesTable.id })
+      .from(candidatesTable)
+      .where(eq(candidatesTable.pollId, id));
+    const candidateIds = candidates.map((c) => c.id);
+
+    // 2. Delete in order of dependency (bottom-up)
+
+    // Step A: Delete votes and ballot tokens (linked to pollId)
+    await db.delete(votesTable).where(eq(votesTable.pollId, id));
+    await db.delete(ballotTokensTable).where(eq(ballotTokensTable.pollId, id));
+
+    // Step B: Delete candidate-specific data (endorsements and documents)
+    if (candidateIds.length > 0) {
+      await db
+        .delete(endorsementsTable)
+        .where(inArray(endorsementsTable.candidateId, candidateIds));
+      await db
+        .delete(candidateDocumentsTable)
+        .where(inArray(candidateDocumentsTable.candidateId, candidateIds));
+    }
+
+    // Step C: Delete candidates (linked to pollId)
+    await db.delete(candidatesTable).where(eq(candidatesTable.pollId, id));
+
+    // Step D: Delete application settings (linked to pollId)
+    await db
+      .delete(electionApplicationSettingsTable)
+      .where(eq(electionApplicationSettingsTable.pollId, id));
+
+    // Step E: Delete poll seats (linked to pollId)
+    await db.delete(pollSeatsTable).where(eq(pollSeatsTable.pollId, id));
+
+    // Step F: Finally delete the poll itself
+    await db.delete(pollsTable).where(eq(pollsTable.id, id));
+
+    // 3. Log the action
+    await audit({
+      action: "admin.delete_poll",
+      actorEmail: req.user!.email,
+      actorRole: "admin",
+      target: id,
+    });
+
+    res.json({ message: "Poll and all associated data deleted successfully" });
+  } catch (error) {
+    console.error("CRITICAL: Delete poll failed", error);
+    res.status(500).json({
+      message: "Internal Server Error: Could not delete poll.",
+      error: error instanceof Error ? error.message : "Unknown database error",
+    });
+  }
 }
 
 export async function lockPoll(req: Request, res: Response) {

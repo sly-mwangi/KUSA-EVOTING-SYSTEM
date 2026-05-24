@@ -45703,7 +45703,7 @@ var import_express9 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib5(), 1);
 var import_pino_http = __toESM(require_logger(), 1);
 import path2 from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { fileURLToPath } from "node:url";
 
 // src/routes/index.ts
 var import_express8 = __toESM(require_express2(), 1);
@@ -49792,7 +49792,7 @@ var studentRecordsTable = pgTable("student_records", {
   feeBalance: numeric("fee_balance", { precision: 10, scale: 2 }).notNull().default("0.00"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
-var usersTable2 = pgTable("users", {
+var usersTable = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
@@ -49819,12 +49819,12 @@ var schoolsTable = pgTable("schools", {
   id: text("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull()
 });
-var departmentsTable2 = pgTable("departments", {
+var departmentsTable = pgTable("departments", {
   id: text("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   schoolId: text("school_id").notNull()
 });
-var coursesTable2 = pgTable("courses", {
+var coursesTable = pgTable("courses", {
   id: text("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   departmentId: text("department_id").notNull(),
@@ -50432,10 +50432,10 @@ async function getSchools(_req, res) {
   const schools = await db.select().from(schoolsTable).orderBy(asc(schoolsTable.name));
   const out = await Promise.all(
     schools.map(async (s) => {
-      const depts = await db.select().from(departmentsTable2).where(eq(departmentsTable2.schoolId, s.id)).orderBy(asc(departmentsTable2.name));
+      const depts = await db.select().from(departmentsTable).where(eq(departmentsTable.schoolId, s.id)).orderBy(asc(departmentsTable.name));
       const departments = await Promise.all(
         depts.map(async (d) => {
-          const courses = await db.select().from(coursesTable2).where(eq(coursesTable2.departmentId, d.id)).orderBy(asc(coursesTable2.name));
+          const courses = await db.select().from(coursesTable).where(eq(coursesTable.departmentId, d.id)).orderBy(asc(coursesTable.name));
           return {
             id: d.id,
             name: d.name,
@@ -50547,24 +50547,24 @@ function hashOtp(otp) {
 }
 async function loadUserProfile(userId) {
   const rows = await db.select({
-    id: usersTable2.id,
-    name: usersTable2.name,
-    email: usersTable2.email,
-    registrationNumber: usersTable2.registrationNumber,
-    role: usersTable2.role,
-    status: usersTable2.status,
-    gender: usersTable2.gender,
-    courseId: usersTable2.courseId,
-    courseName: coursesTable2.name,
-    departmentId: departmentsTable2.id,
-    departmentName: departmentsTable2.name,
+    id: usersTable.id,
+    name: usersTable.name,
+    email: usersTable.email,
+    registrationNumber: usersTable.registrationNumber,
+    role: usersTable.role,
+    status: usersTable.status,
+    gender: usersTable.gender,
+    courseId: usersTable.courseId,
+    courseName: coursesTable.name,
+    departmentId: departmentsTable.id,
+    departmentName: departmentsTable.name,
     schoolId: schoolsTable.id,
     schoolName: schoolsTable.name,
-    hostelId: usersTable2.hostelId,
+    hostelId: usersTable.hostelId,
     hostelName: hostelsTable.name,
-    feeStatus: usersTable2.feeStatus,
-    registrationExpiresAt: usersTable2.registrationExpiresAt
-  }).from(usersTable2).leftJoin(coursesTable2, eq(usersTable2.courseId, coursesTable2.id)).leftJoin(departmentsTable2, eq(coursesTable2.departmentId, departmentsTable2.id)).leftJoin(schoolsTable, eq(departmentsTable2.schoolId, schoolsTable.id)).leftJoin(hostelsTable, eq(usersTable2.hostelId, hostelsTable.id)).where(eq(usersTable2.id, userId)).limit(1);
+    feeStatus: usersTable.feeStatus,
+    registrationExpiresAt: usersTable.registrationExpiresAt
+  }).from(usersTable).leftJoin(coursesTable, eq(usersTable.courseId, coursesTable.id)).leftJoin(departmentsTable, eq(coursesTable.departmentId, departmentsTable.id)).leftJoin(schoolsTable, eq(departmentsTable.schoolId, schoolsTable.id)).leftJoin(hostelsTable, eq(usersTable.hostelId, hostelsTable.id)).where(eq(usersTable.id, userId)).limit(1);
   const r = rows[0];
   if (!r) return null;
   return {
@@ -50614,13 +50614,12 @@ var SMTP_HOST = process.env["SMTP_HOST"];
 var SMTP_PORT = Number(process.env["SMTP_PORT"] ?? "587");
 var SMTP_USER = process.env["SMTP_USER"];
 var SMTP_PASS = process.env["SMTP_PASS"];
-var SMTP_FROM = process.env["SMTP_FROM"] ?? SMTP_USER ?? "noreply@kuvote.ku.ac.ke";
+var SMTP_FROM = process.env["SMTP_FROM"] ?? "noreply@kuvote.ku.ac.ke";
 var SMTP_FROM_NAME = process.env["SMTP_FROM_NAME"] ?? "KUVOTE \u2013 KU Elections";
+var MAILTRAP_USER = process.env["MAILTRAP_USER"];
+var MAILTRAP_PASS = process.env["MAILTRAP_PASS"];
 var SENDGRID_API_KEY = process.env["SENDGRID_API_KEY"];
 var SENDGRID_FROM = process.env["SENDGRID_FROM"] ?? "noreply@kuvote.ku.ac.ke";
-function isEmailConfigured() {
-  return Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS || SENDGRID_API_KEY);
-}
 function buildOtpHtml(otp, purpose) {
   const heading = purpose === "registration" ? "Verify your KUVOTE account" : "Reset your KUVOTE password";
   const body = purpose === "registration" ? "Thank you for registering on <strong>KUVOTE</strong>, the Kenyatta University Students' digital voting platform. Use the code below to verify your email address and activate your account." : "We received a request to reset the password for your <strong>KUVOTE</strong> account. Enter the code below to proceed. If you did not request this, please ignore this email.";
@@ -50684,19 +50683,40 @@ function buildOtpHtml(otp, purpose) {
 </html>`;
 }
 async function sendViaSMTP(payload) {
+  const host = payload.config?.host ?? SMTP_HOST;
+  const port = payload.config?.port ?? SMTP_PORT;
+  const user = payload.config?.user ?? SMTP_USER;
+  const pass = payload.config?.pass ?? SMTP_PASS;
   const transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS }
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+    connectionTimeout: 1e4
+    // 10 seconds
   });
-  await transporter.sendMail({
-    from: `"${SMTP_FROM_NAME}" <${SMTP_FROM}>`,
-    to: payload.to,
-    subject: payload.subject,
-    text: payload.text,
-    html: payload.html
-  });
+  try {
+    await transporter.verify();
+    await transporter.sendMail({
+      from: `"${SMTP_FROM_NAME}" <${SMTP_FROM}>`,
+      to: payload.to,
+      subject: payload.subject,
+      text: payload.text,
+      html: payload.html
+    });
+  } catch (error) {
+    logger.error(
+      {
+        error: error.message,
+        code: error.code,
+        host,
+        port,
+        user: user ? "set" : "not set"
+      },
+      "SMTP Error Details"
+    );
+    throw error;
+  }
 }
 async function sendViaSendGrid(payload) {
   const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
@@ -50717,23 +50737,53 @@ async function sendViaSendGrid(payload) {
   });
   if (!res.ok) {
     const body = await res.text();
-    logger.error({ status: res.status, body, to: payload.to }, "SendGrid email failed");
+    logger.error(
+      { status: res.status, body, to: payload.to },
+      "SendGrid email failed"
+    );
     throw new Error(`SendGrid error: ${res.status}`);
   }
 }
 async function sendEmail(payload) {
+  if (MAILTRAP_USER && MAILTRAP_PASS) {
+    await sendViaSMTP({
+      ...payload,
+      config: {
+        host: "sandbox.smtp.mailtrap.io",
+        port: 2525,
+        user: MAILTRAP_USER,
+        pass: MAILTRAP_PASS
+      }
+    });
+    logger.info(
+      { to: payload.to, subject: payload.subject },
+      "Email sent via Mailtrap"
+    );
+    return;
+  }
   if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
     await sendViaSMTP(payload);
-    logger.info({ to: payload.to, subject: payload.subject }, "Email sent via SMTP");
+    logger.info(
+      { to: payload.to, subject: payload.subject },
+      "Email sent via SMTP"
+    );
     return;
   }
   if (SENDGRID_API_KEY) {
     await sendViaSendGrid(payload);
-    logger.info({ to: payload.to, subject: payload.subject }, "Email sent via SendGrid");
+    logger.info(
+      { to: payload.to, subject: payload.subject },
+      "Email sent via SendGrid"
+    );
     return;
   }
-  logger.warn({ to: payload.to, subject: payload.subject }, "No email provider configured \u2014 logging OTP to console (dev mode)");
-  logger.info({ to: payload.to, subject: payload.subject, body: payload.text }, "OUTGOING EMAIL (DEV)");
+  logger.error(
+    { to: payload.to, subject: payload.subject },
+    "CRITICAL: No email provider configured. OTP cannot be sent."
+  );
+  throw new Error(
+    "Email service is not configured. Please set up Mailtrap or SMTP."
+  );
 }
 async function sendOtpEmail(to, otp, purpose) {
   const subject = purpose === "registration" ? "Your KUVOTE verification code" : "Your KUVOTE password reset code";
@@ -50797,7 +50847,7 @@ async function issueOtp(email, purpose) {
     await sendOtpEmail(email, code, purpose);
   } catch {
   }
-  return { code, devOtp: isEmailConfigured() ? null : code };
+  return { code };
 }
 async function consumeOtp(email, code, purpose) {
   const codeHash = hashOtp(code);
@@ -50840,7 +50890,7 @@ async function prefillRegistration(req, res) {
   }
   const feeBalance = parseFloat(student.feeBalance ?? "0");
   const feeCleared = feeBalance === 0;
-  const userRows = await db.select({ id: usersTable2.id, status: usersTable2.status }).from(usersTable2).where(eq(usersTable2.email, student.email)).limit(1);
+  const userRows = await db.select({ id: usersTable.id, status: usersTable.status }).from(usersTable).where(eq(usersTable.email, student.email)).limit(1);
   const alreadyActive = userRows[0]?.status === "active";
   res.json({
     notInDatabase: false,
@@ -50899,7 +50949,7 @@ async function register(req, res) {
     return;
   }
   const email = student.email;
-  const existingRows = await db.select().from(usersTable2).where(eq(usersTable2.email, email)).limit(1);
+  const existingRows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   const existing = existingRows[0];
   if (existing?.status === "active") {
     res.status(409).json({
@@ -50910,7 +50960,7 @@ async function register(req, res) {
   const expiresAt = addMonths(/* @__PURE__ */ new Date(), REGISTRATION_VALID_MONTHS);
   const chosenHostel = hostelId || student.hostelId || null;
   if (existing) {
-    await db.update(usersTable2).set({
+    await db.update(usersTable).set({
       name: student.name,
       passwordHash: hashPassword(password),
       gender: student.gender,
@@ -50919,9 +50969,9 @@ async function register(req, res) {
       registrationNumber: regNo,
       registrationExpiresAt: expiresAt,
       feeStatus: "cleared"
-    }).where(eq(usersTable2.id, existing.id));
+    }).where(eq(usersTable.id, existing.id));
   } else {
-    await db.insert(usersTable2).values({
+    await db.insert(usersTable).values({
       name: student.name,
       email,
       passwordHash: hashPassword(password),
@@ -50944,8 +50994,7 @@ async function register(req, res) {
   });
   res.status(201).json({
     message: "Verification code sent to your university email",
-    email,
-    devOtp: otp.devOtp
+    email
   });
 }
 async function verifyOtp(req, res) {
@@ -50959,13 +51008,13 @@ async function verifyOtp(req, res) {
     res.status(400).json({ message: "Invalid or expired code" });
     return;
   }
-  const userRows = await db.select().from(usersTable2).where(eq(usersTable2.email, email)).limit(1);
+  const userRows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   const user = userRows[0];
   if (!user) {
     res.status(404).json({ message: "User not found" });
     return;
   }
-  await db.update(usersTable2).set({ status: "active" }).where(eq(usersTable2.id, user.id));
+  await db.update(usersTable).set({ status: "active" }).where(eq(usersTable.id, user.id));
   const token = signToken({
     sub: user.id,
     email: user.email,
@@ -50987,8 +51036,8 @@ async function resendOtp(req, res) {
     return;
   }
   const purposeBody = req.body?.purpose ?? "registration";
-  const otp = await issueOtp(email, purposeBody);
-  res.json({ message: "Code sent", devOtp: otp.devOtp });
+  await issueOtp(email, purposeBody);
+  res.json({ message: "Code sent" });
 }
 async function login(req, res) {
   const { identifier, password } = req.body ?? {};
@@ -51005,8 +51054,8 @@ async function login(req, res) {
     }
   }
   const isEmail = lookupEmail.includes("@");
-  const userRows = await db.select().from(usersTable2).where(
-    isEmail ? eq(usersTable2.email, lookupEmail) : eq(usersTable2.registrationNumber, identifier)
+  const userRows = await db.select().from(usersTable).where(
+    isEmail ? eq(usersTable.email, lookupEmail) : eq(usersTable.registrationNumber, identifier)
   ).limit(1);
   const user = userRows[0];
   if (!user) {
@@ -51038,13 +51087,8 @@ async function login(req, res) {
     const student = studentRows[0];
     if (student) {
       const feeBalance = parseFloat(student.feeBalance ?? "0");
-      if (feeBalance > 0) {
-        res.status(403).json({
-          message: `Access denied. Your fee balance of KES ${feeBalance.toLocaleString()} is not cleared. Please visit the Finance Office.`,
-          code: "FEE_NOT_CLEARED"
-        });
-        return;
-      }
+      const feeStatus = feeBalance === 0 ? "cleared" : "outstanding";
+      await db.update(usersTable).set({ feeStatus }).where(eq(usersTable.id, user.id));
     }
   }
   const token = signToken({
@@ -51067,7 +51111,7 @@ async function adminLogin(req, res) {
     res.status(400).json({ message: "email and password are required" });
     return;
   }
-  const userRows = await db.select().from(usersTable2).where(eq(usersTable2.email, email)).limit(1);
+  const userRows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   const user = userRows[0];
   if (!user || user.role !== "admin") {
     res.status(401).json({ message: "Invalid admin credentials" });
@@ -51093,22 +51137,21 @@ async function forgotPassword(req, res) {
     res.status(400).json({ message: "email required" });
     return;
   }
-  const userRows = await db.select().from(usersTable2).where(eq(usersTable2.email, email)).limit(1);
+  const userRows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   if (!userRows[0]) {
     res.json({
-      message: "If an account exists, a code has been sent",
-      devOtp: null
+      message: "If an account exists, a code has been sent"
     });
     return;
   }
-  const otp = await issueOtp(email, "password_reset");
+  await issueOtp(email, "password_reset");
   await audit({
     action: "user.forgot_password",
     actorEmail: email,
     actorRole: "student",
     target: email
   });
-  res.json({ message: "Reset code sent", devOtp: otp.devOtp });
+  res.json({ message: "Reset code sent" });
 }
 async function resetPassword(req, res) {
   const {
@@ -51130,7 +51173,7 @@ async function resetPassword(req, res) {
     res.status(400).json({ message: "Invalid or expired code" });
     return;
   }
-  await db.update(usersTable2).set({ passwordHash: hashPassword(newPassword) }).where(eq(usersTable2.email, email));
+  await db.update(usersTable).set({ passwordHash: hashPassword(newPassword) }).where(eq(usersTable.email, email));
   await audit({
     action: "user.reset_password",
     actorEmail: email,
@@ -51157,7 +51200,7 @@ async function requireAuth(req, res, next) {
     res.status(401).json({ message: "Invalid or expired token" });
     return;
   }
-  const user = await db.select().from(usersTable2).where(eq(usersTable2.id, payload.sub)).limit(1);
+  const user = await db.select().from(usersTable).where(eq(usersTable.id, payload.sub)).limit(1);
   const u = user[0];
   if (!u || u.status === "disabled") {
     res.status(401).json({ message: "Account is disabled or not found" });
@@ -51217,13 +51260,13 @@ async function changePassword(req, res) {
     res.status(400).json({ message: "New password must be at least 8 characters" });
     return;
   }
-  const userRows = await db.select().from(usersTable2).where(eq(usersTable2.id, req.user.id)).limit(1);
+  const userRows = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id)).limit(1);
   const user = userRows[0];
   if (!user || !await verifyPassword(currentPassword, user.passwordHash)) {
     res.status(400).json({ message: "Current password is incorrect" });
     return;
   }
-  await db.update(usersTable2).set({ passwordHash: await hashPassword(newPassword) }).where(eq(usersTable2.id, req.user.id));
+  await db.update(usersTable).set({ passwordHash: await hashPassword(newPassword) }).where(eq(usersTable.id, req.user.id));
   await audit({
     action: "user.change_password",
     actorEmail: req.user.email,
@@ -51286,16 +51329,16 @@ async function userVotedSeats(pollId, userId) {
 async function eligibleSeatsForUser(pollId, userId) {
   const seats = await db.select().from(pollSeatsTable).where(eq(pollSeatsTable.pollId, pollId));
   const userRows = await db.select({
-    id: usersTable2.id,
-    gender: usersTable2.gender,
-    hostelId: usersTable2.hostelId,
-    courseId: usersTable2.courseId,
-    departmentId: coursesTable2.departmentId,
-    schoolId: departmentsTable2.schoolId
-  }).from(usersTable2).leftJoin(coursesTable2, eq(usersTable2.courseId, coursesTable2.id)).leftJoin(
-    departmentsTable2,
-    eq(coursesTable2.departmentId, departmentsTable2.id)
-  ).where(eq(usersTable2.id, userId)).limit(1);
+    id: usersTable.id,
+    gender: usersTable.gender,
+    hostelId: usersTable.hostelId,
+    courseId: usersTable.courseId,
+    departmentId: coursesTable.departmentId,
+    schoolId: departmentsTable.schoolId
+  }).from(usersTable).leftJoin(coursesTable, eq(usersTable.courseId, coursesTable.id)).leftJoin(
+    departmentsTable,
+    eq(coursesTable.departmentId, departmentsTable.id)
+  ).where(eq(usersTable.id, userId)).limit(1);
   const user = userRows[0];
   if (!user) return [];
   return seats.filter((s) => {
@@ -51373,11 +51416,11 @@ async function getPoll(req, res) {
       const isEligible = eligibleSeats.some((es) => es.id === s.id);
       const candidateRows = await db.select({
         id: candidatesTable.id,
-        name: usersTable2.name,
+        name: usersTable.name,
         manifesto: candidatesTable.manifesto,
         photoUrl: candidatesTable.photoUrl,
         status: candidatesTable.status
-      }).from(candidatesTable).leftJoin(usersTable2, eq(candidatesTable.userId, usersTable2.id)).where(
+      }).from(candidatesTable).leftJoin(usersTable, eq(candidatesTable.userId, usersTable.id)).where(
         and(
           eq(candidatesTable.seatId, s.id),
           eq(candidatesTable.status, "approved")
@@ -51518,8 +51561,8 @@ async function getPollResults(req, res) {
     seats.map(async (s) => {
       const candidates = await db.select({
         id: candidatesTable.id,
-        name: usersTable2.name
-      }).from(candidatesTable).leftJoin(usersTable2, eq(candidatesTable.userId, usersTable2.id)).where(
+        name: usersTable.name
+      }).from(candidatesTable).leftJoin(usersTable, eq(candidatesTable.userId, usersTable.id)).where(
         and(
           eq(candidatesTable.seatId, s.id),
           eq(candidatesTable.status, "approved")
@@ -51567,7 +51610,7 @@ async function requireFeeCleared(req, res, next) {
     res.status(401).json({ message: "Authentication required" });
     return;
   }
-  const rows = await db.select({ feeStatus: usersTable2.feeStatus }).from(usersTable2).where(eq(usersTable2.id, req.user.id)).limit(1);
+  const rows = await db.select({ feeStatus: usersTable.feeStatus }).from(usersTable).where(eq(usersTable.id, req.user.id)).limit(1);
   const feeStatus = rows[0]?.feeStatus;
   if (feeStatus !== "cleared") {
     res.status(403).json({
@@ -51584,7 +51627,13 @@ var router5 = (0, import_express5.Router)();
 router5.get("/polls/active/public", getActivePublicPolls);
 router5.get("/polls", requireAuth, getPolls);
 router5.get("/polls/:pollId", requireAuth, getPoll);
-router5.post("/polls/:pollId/vote", requireAuth, requireRole("student"), requireFeeCleared, castVote);
+router5.post(
+  "/polls/:pollId/vote",
+  requireAuth,
+  requireRole("student"),
+  requireFeeCleared,
+  castVote
+);
 router5.get("/polls/:pollId/results", requireAuth, getPollResults);
 var polls_default = router5;
 
@@ -51594,10 +51643,7 @@ var import_express6 = __toESM(require_express2(), 1);
 // src/controllers/candidates.controller.ts
 import path from "node:path";
 import fs from "node:fs";
-import { fileURLToPath } from "node:url";
-var __filename = fileURLToPath(import.meta.url);
-var __dirname2 = path.dirname(__filename);
-var UPLOADS_DIR = path.resolve(__dirname2, "..", "..", "uploads");
+var UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
@@ -51627,7 +51673,10 @@ async function applyCandidate(req, res) {
     return;
   }
   const seatRows = await db.select().from(pollSeatsTable).where(
-    and(eq(pollSeatsTable.id, seatId), eq(pollSeatsTable.pollId, pollId))
+    and(
+      eq(pollSeatsTable.id, seatId),
+      eq(pollSeatsTable.pollId, pollId)
+    )
   ).limit(1);
   const seat = seatRows[0];
   if (!seat) {
@@ -51664,28 +51713,61 @@ async function applyCandidate(req, res) {
     res.status(403).json({ message: "Only residential students can apply for this seat" });
     return;
   }
-  const allAttempts = await db.select().from(candidatesTable).where(
+  const exists2 = await db.select().from(candidatesTable).where(
     and(
       eq(candidatesTable.seatId, seatId),
       eq(candidatesTable.userId, req.user.id)
     )
-  ).orderBy(desc(candidatesTable.attemptNumber));
-  const latestAttempt = allAttempts[0];
-  if (latestAttempt) {
-    if (latestAttempt.status !== "rejected") {
-      res.status(409).json({
-        message: "You have an active or approved application for this seat"
-      });
-      return;
+  ).limit(1);
+  if (exists2[0]) {
+    res.status(409).json({ message: "You have already applied for this seat" });
+    return;
+  }
+  if (poll.pollType === "sgc") {
+    const closedPolls = await db.select({ id: pollsTable.id }).from(pollsTable).where(and(eq(pollsTable.locked, true), desc(pollsTable.endDate)));
+    let isWinner = false;
+    for (const p of closedPolls) {
+      const seats = await db.select({ id: pollSeatsTable.id }).from(pollSeatsTable).where(eq(pollSeatsTable.pollId, p.id));
+      for (const s of seats) {
+        const candidates = await db.select({ id: candidatesTable.id, userId: candidatesTable.userId }).from(candidatesTable).where(
+          and(
+            eq(candidatesTable.seatId, s.id),
+            eq(candidatesTable.status, "approved")
+          )
+        );
+        const counts = await Promise.all(
+          candidates.map(async (c) => {
+            const r = await db.select({ n: count() }).from(votesTable).where(
+              and(
+                eq(votesTable.seatId, s.id),
+                eq(votesTable.candidateId, c.id)
+              )
+            );
+            return {
+              id: c.id,
+              userId: c.userId,
+              votes: Number(r[0]?.n ?? 0)
+            };
+          })
+        );
+        const winner = counts.length ? counts.reduce(
+          (best, c) => c.votes > best.votes ? c : best,
+          counts[0]
+        ) : null;
+        if (winner && winner.votes > 0 && winner.userId === req.user.id) {
+          isWinner = true;
+          break;
+        }
+      }
+      if (isWinner) break;
     }
-    if (latestAttempt.attemptNumber >= 2) {
+    if (!isWinner) {
       res.status(403).json({
-        message: "You have already used your 2 application attempts for this seat"
+        message: "Only winners of previous elections are eligible to apply for SGC positions."
       });
       return;
     }
   }
-  const nextAttemptNumber = latestAttempt ? latestAttempt.attemptNumber + 1 : 1;
   const inserted = await db.insert(candidatesTable).values({
     pollId,
     seatId,
@@ -51693,8 +51775,7 @@ async function applyCandidate(req, res) {
     manifesto,
     slogan: slogan ?? null,
     bio: bio ?? null,
-    status: "pending",
-    attemptNumber: nextAttemptNumber
+    status: "pending"
   }).returning();
   await audit({
     action: "candidate.apply",
@@ -51858,9 +51939,9 @@ var import_express7 = __toESM(require_express2(), 1);
 // src/controllers/admin.controller.ts
 async function getDashboard(_req, res) {
   const now = /* @__PURE__ */ new Date();
-  const totalVoters = await db.select({ n: count() }).from(usersTable2).where(eq(usersTable2.role, "student"));
-  const activeVoters = await db.select({ n: count() }).from(usersTable2).where(
-    and(eq(usersTable2.role, "student"), eq(usersTable2.status, "active"))
+  const totalVoters = await db.select({ n: count() }).from(usersTable).where(eq(usersTable.role, "student"));
+  const activeVoters = await db.select({ n: count() }).from(usersTable).where(
+    and(eq(usersTable.role, "student"), eq(usersTable.status, "active"))
   );
   const totalVotes = await db.select({ n: count() }).from(votesTable);
   const allPolls = await db.select().from(pollsTable);
@@ -51992,24 +52073,34 @@ async function updatePoll(req, res) {
 }
 async function deletePoll(req, res) {
   const { pollId } = req.params;
-  await db.delete(candidateDocumentsTable).where(
-    eq(
-      candidateDocumentsTable.candidateId,
-      db.select({ id: candidatesTable.id }).from(candidatesTable).where(eq(candidatesTable.pollId, pollId)).limit(1)
-    )
-  ).catch(() => {
-  });
-  await db.delete(candidatesTable).where(eq(candidatesTable.pollId, pollId));
-  await db.delete(pollSeatsTable).where(eq(pollSeatsTable.pollId, pollId));
-  await db.delete(electionApplicationSettingsTable).where(eq(electionApplicationSettingsTable.pollId, pollId));
-  await db.delete(pollsTable).where(eq(pollsTable.id, pollId));
-  await audit({
-    action: "admin.delete_poll",
-    actorEmail: req.user.email,
-    actorRole: "admin",
-    target: pollId
-  });
-  res.json({ message: "Poll deleted" });
+  const id = pollId;
+  try {
+    const candidates = await db.select({ id: candidatesTable.id }).from(candidatesTable).where(eq(candidatesTable.pollId, id));
+    const candidateIds = candidates.map((c) => c.id);
+    await db.delete(votesTable).where(eq(votesTable.pollId, id));
+    await db.delete(ballotTokensTable).where(eq(ballotTokensTable.pollId, id));
+    if (candidateIds.length > 0) {
+      await db.delete(endorsementsTable).where(inArray(endorsementsTable.candidateId, candidateIds));
+      await db.delete(candidateDocumentsTable).where(inArray(candidateDocumentsTable.candidateId, candidateIds));
+    }
+    await db.delete(candidatesTable).where(eq(candidatesTable.pollId, id));
+    await db.delete(electionApplicationSettingsTable).where(eq(electionApplicationSettingsTable.pollId, id));
+    await db.delete(pollSeatsTable).where(eq(pollSeatsTable.pollId, id));
+    await db.delete(pollsTable).where(eq(pollsTable.id, id));
+    await audit({
+      action: "admin.delete_poll",
+      actorEmail: req.user.email,
+      actorRole: "admin",
+      target: id
+    });
+    res.json({ message: "Poll and all associated data deleted successfully" });
+  } catch (error) {
+    console.error("CRITICAL: Delete poll failed", error);
+    res.status(500).json({
+      message: "Internal Server Error: Could not delete poll.",
+      error: error instanceof Error ? error.message : "Unknown database error"
+    });
+  }
 }
 async function lockPoll(req, res) {
   const { pollId } = req.params;
@@ -52129,19 +52220,19 @@ async function getApplicationSettings2(req, res) {
 async function getUsers(req, res) {
   const genderFilter = req.query.gender;
   const rows = await db.select({
-    id: usersTable2.id,
-    name: usersTable2.name,
-    email: usersTable2.email,
-    registrationNumber: usersTable2.registrationNumber,
-    role: usersTable2.role,
-    status: usersTable2.status,
-    gender: usersTable2.gender,
+    id: usersTable.id,
+    name: usersTable.name,
+    email: usersTable.email,
+    registrationNumber: usersTable.registrationNumber,
+    role: usersTable.role,
+    status: usersTable.status,
+    gender: usersTable.gender,
     hostelName: hostelsTable.name,
-    courseName: coursesTable2.name,
-    registrationExpiresAt: usersTable2.registrationExpiresAt,
-    feeStatus: usersTable2.feeStatus,
-    createdAt: usersTable2.createdAt
-  }).from(usersTable2).leftJoin(hostelsTable, eq(usersTable2.hostelId, hostelsTable.id)).leftJoin(coursesTable2, eq(usersTable2.courseId, coursesTable2.id)).orderBy(desc(usersTable2.createdAt));
+    courseName: coursesTable.name,
+    registrationExpiresAt: usersTable.registrationExpiresAt,
+    feeStatus: usersTable.feeStatus,
+    createdAt: usersTable.createdAt
+  }).from(usersTable).leftJoin(hostelsTable, eq(usersTable.hostelId, hostelsTable.id)).leftJoin(coursesTable, eq(usersTable.courseId, coursesTable.id)).orderBy(desc(usersTable.createdAt));
   const filtered = genderFilter && genderFilter !== "all" ? rows.filter((r) => r.gender === genderFilter) : rows;
   res.json(
     filtered.map((r) => ({
@@ -52162,7 +52253,7 @@ async function getUsers(req, res) {
 }
 async function removeVoter(req, res) {
   const { userId } = req.params;
-  const userRows = await db.select().from(usersTable2).where(eq(usersTable2.id, userId)).limit(1);
+  const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!userRows[0]) {
     res.status(404).json({ message: "User not found" });
     return;
@@ -52171,7 +52262,7 @@ async function removeVoter(req, res) {
     res.status(403).json({ message: "Cannot remove an admin user" });
     return;
   }
-  await db.delete(usersTable2).where(eq(usersTable2.id, userId));
+  await db.delete(usersTable).where(eq(usersTable.id, userId));
   await audit({
     action: "admin.remove_voter",
     actorEmail: req.user.email,
@@ -52182,7 +52273,7 @@ async function removeVoter(req, res) {
   res.json({ message: "Voter removed from the system" });
 }
 async function approveUser(req, res) {
-  await db.update(usersTable2).set({ status: "active" }).where(eq(usersTable2.id, req.params.userId));
+  await db.update(usersTable).set({ status: "active" }).where(eq(usersTable.id, req.params.userId));
   await audit({
     action: "admin.approve_user",
     actorEmail: req.user.email,
@@ -52192,7 +52283,7 @@ async function approveUser(req, res) {
   res.json({ message: "User approved" });
 }
 async function disableUser(req, res) {
-  await db.update(usersTable2).set({ status: "disabled" }).where(eq(usersTable2.id, req.params.userId));
+  await db.update(usersTable).set({ status: "disabled" }).where(eq(usersTable.id, req.params.userId));
   await audit({
     action: "admin.disable_user",
     actorEmail: req.user.email,
@@ -52202,7 +52293,7 @@ async function disableUser(req, res) {
   res.json({ message: "User disabled" });
 }
 async function promoteUser(req, res) {
-  await db.update(usersTable2).set({ role: "admin" }).where(eq(usersTable2.id, req.params.userId));
+  await db.update(usersTable).set({ role: "admin" }).where(eq(usersTable.id, req.params.userId));
   await audit({
     action: "admin.promote_user",
     actorEmail: req.user.email,
@@ -52219,8 +52310,8 @@ async function getAdminCandidates(_req, res) {
     seatId: candidatesTable.seatId,
     seatLabel: pollSeatsTable.label,
     userId: candidatesTable.userId,
-    name: usersTable2.name,
-    email: usersTable2.email,
+    name: usersTable.name,
+    email: usersTable.email,
     manifesto: candidatesTable.manifesto,
     slogan: candidatesTable.slogan,
     bio: candidatesTable.bio,
@@ -52229,7 +52320,7 @@ async function getAdminCandidates(_req, res) {
     rejectionReason: candidatesTable.rejectionReason,
     reviewedAt: candidatesTable.reviewedAt,
     createdAt: candidatesTable.createdAt
-  }).from(candidatesTable).leftJoin(pollsTable, eq(candidatesTable.pollId, pollsTable.id)).leftJoin(pollSeatsTable, eq(candidatesTable.seatId, pollSeatsTable.id)).leftJoin(usersTable2, eq(candidatesTable.userId, usersTable2.id)).orderBy(desc(candidatesTable.createdAt));
+  }).from(candidatesTable).leftJoin(pollsTable, eq(candidatesTable.pollId, pollsTable.id)).leftJoin(pollSeatsTable, eq(candidatesTable.seatId, pollSeatsTable.id)).leftJoin(usersTable, eq(candidatesTable.userId, usersTable.id)).orderBy(desc(candidatesTable.createdAt));
   const withDocs = await Promise.all(
     rows.map(async (r) => {
       const docs = await db.select().from(candidateDocumentsTable).where(eq(candidateDocumentsTable.candidateId, r.id));
@@ -52324,10 +52415,10 @@ async function getReports(_req, res) {
     schoolId: schoolsTable.id,
     schoolName: schoolsTable.name,
     n: count()
-  }).from(usersTable2).leftJoin(coursesTable2, eq(usersTable2.courseId, coursesTable2.id)).leftJoin(
-    departmentsTable2,
-    eq(coursesTable2.departmentId, departmentsTable2.id)
-  ).leftJoin(schoolsTable, eq(departmentsTable2.schoolId, schoolsTable.id)).where(eq(usersTable2.role, "student")).groupBy(schoolsTable.id, schoolsTable.name);
+  }).from(usersTable).leftJoin(coursesTable, eq(usersTable.courseId, coursesTable.id)).leftJoin(
+    departmentsTable,
+    eq(coursesTable.departmentId, departmentsTable.id)
+  ).leftJoin(schoolsTable, eq(departmentsTable.schoolId, schoolsTable.id)).where(eq(usersTable.role, "student")).groupBy(schoolsTable.id, schoolsTable.name);
   const candidatesByPoll = await db.select({
     pollId: pollsTable.id,
     pollTitle: pollsTable.title,
@@ -52336,8 +52427,8 @@ async function getReports(_req, res) {
   const polls = await db.select().from(pollsTable).orderBy(desc(pollsTable.createdAt));
   const participation = await Promise.all(
     polls.map(async (p) => {
-      const totalEligible = await db.select({ n: count() }).from(usersTable2).where(
-        and(eq(usersTable2.role, "student"), eq(usersTable2.status, "active"))
+      const totalEligible = await db.select({ n: count() }).from(usersTable).where(
+        and(eq(usersTable.role, "student"), eq(usersTable.status, "active"))
       );
       const totalVoted = await db.selectDistinct({ userId: ballotTokensTable.userId }).from(ballotTokensTable).where(eq(ballotTokensTable.pollId, p.id));
       const eligibleN = Number(totalEligible[0]?.n ?? 0);
@@ -52374,7 +52465,7 @@ async function getElectionResultsReport(_req, res) {
       const seats = await db.select().from(pollSeatsTable).where(eq(pollSeatsTable.pollId, p.id));
       const seatResults = await Promise.all(
         seats.map(async (s) => {
-          const candidates = await db.select({ id: candidatesTable.id, name: usersTable2.name }).from(candidatesTable).leftJoin(usersTable2, eq(candidatesTable.userId, usersTable2.id)).where(
+          const candidates = await db.select({ id: candidatesTable.id, name: usersTable.name }).from(candidatesTable).leftJoin(usersTable, eq(candidatesTable.userId, usersTable.id)).where(
             and(
               eq(candidatesTable.seatId, s.id),
               eq(candidatesTable.status, "approved")
@@ -52431,14 +52522,14 @@ async function getVoterTurnoutReport(_req, res) {
   const polls = await db.select().from(pollsTable).orderBy(desc(pollsTable.createdAt));
   const now = /* @__PURE__ */ new Date();
   const allStudents = await db.select({
-    id: usersTable2.id,
+    id: usersTable.id,
     schoolId: schoolsTable.id,
     schoolName: schoolsTable.name
-  }).from(usersTable2).leftJoin(coursesTable2, eq(usersTable2.courseId, coursesTable2.id)).leftJoin(
-    departmentsTable2,
-    eq(coursesTable2.departmentId, departmentsTable2.id)
-  ).leftJoin(schoolsTable, eq(departmentsTable2.schoolId, schoolsTable.id)).where(
-    and(eq(usersTable2.role, "student"), eq(usersTable2.status, "active"))
+  }).from(usersTable).leftJoin(coursesTable, eq(usersTable.courseId, coursesTable.id)).leftJoin(
+    departmentsTable,
+    eq(coursesTable.departmentId, departmentsTable.id)
+  ).leftJoin(schoolsTable, eq(departmentsTable.schoolId, schoolsTable.id)).where(
+    and(eq(usersTable.role, "student"), eq(usersTable.status, "active"))
   );
   const turnout = await Promise.all(
     polls.map(async (p) => {
@@ -52493,11 +52584,11 @@ async function getCandidateReport(_req, res) {
     seatId: candidatesTable.seatId,
     seatLabel: pollSeatsTable.label,
     userId: candidatesTable.userId,
-    name: usersTable2.name,
-    email: usersTable2.email,
-    gender: usersTable2.gender,
-    registrationNumber: usersTable2.registrationNumber,
-    courseName: coursesTable2.name,
+    name: usersTable.name,
+    email: usersTable.email,
+    gender: usersTable.gender,
+    registrationNumber: usersTable.registrationNumber,
+    courseName: coursesTable.name,
     manifesto: candidatesTable.manifesto,
     slogan: candidatesTable.slogan,
     bio: candidatesTable.bio,
@@ -52506,7 +52597,7 @@ async function getCandidateReport(_req, res) {
     rejectionReason: candidatesTable.rejectionReason,
     reviewedAt: candidatesTable.reviewedAt,
     createdAt: candidatesTable.createdAt
-  }).from(candidatesTable).leftJoin(pollsTable, eq(candidatesTable.pollId, pollsTable.id)).leftJoin(pollSeatsTable, eq(candidatesTable.seatId, pollSeatsTable.id)).leftJoin(usersTable2, eq(candidatesTable.userId, usersTable2.id)).leftJoin(coursesTable2, eq(usersTable2.courseId, coursesTable2.id)).orderBy(desc(candidatesTable.createdAt));
+  }).from(candidatesTable).leftJoin(pollsTable, eq(candidatesTable.pollId, pollsTable.id)).leftJoin(pollSeatsTable, eq(candidatesTable.seatId, pollSeatsTable.id)).leftJoin(usersTable, eq(candidatesTable.userId, usersTable.id)).leftJoin(coursesTable, eq(usersTable.courseId, coursesTable.id)).orderBy(desc(candidatesTable.createdAt));
   const withDocs = await Promise.all(
     rows.map(async (r) => {
       const docs = await db.select().from(candidateDocumentsTable).where(eq(candidateDocumentsTable.candidateId, r.id));
@@ -52544,15 +52635,15 @@ async function getCandidateReport(_req, res) {
 }
 async function getVoterParticipationReport(_req, res) {
   const voters = await db.select({
-    id: usersTable2.id,
-    name: usersTable2.name,
-    email: usersTable2.email,
-    registrationNumber: usersTable2.registrationNumber,
-    gender: usersTable2.gender,
-    status: usersTable2.status,
-    feeStatus: usersTable2.feeStatus,
-    createdAt: usersTable2.createdAt
-  }).from(usersTable2).where(eq(usersTable2.role, "student")).orderBy(desc(usersTable2.createdAt));
+    id: usersTable.id,
+    name: usersTable.name,
+    email: usersTable.email,
+    registrationNumber: usersTable.registrationNumber,
+    gender: usersTable.gender,
+    status: usersTable.status,
+    feeStatus: usersTable.feeStatus,
+    createdAt: usersTable.createdAt
+  }).from(usersTable).where(eq(usersTable.role, "student")).orderBy(desc(usersTable.createdAt));
   const polls = await db.select().from(pollsTable);
   const report = await Promise.all(
     voters.map(async (v) => {
@@ -52601,16 +52692,16 @@ async function getRejectedCandidatesReport(_req, res) {
     seatId: candidatesTable.seatId,
     seatLabel: pollSeatsTable.label,
     userId: candidatesTable.userId,
-    name: usersTable2.name,
-    email: usersTable2.email,
-    gender: usersTable2.gender,
-    registrationNumber: usersTable2.registrationNumber,
+    name: usersTable.name,
+    email: usersTable.email,
+    gender: usersTable.gender,
+    registrationNumber: usersTable.registrationNumber,
     manifesto: candidatesTable.manifesto,
     status: candidatesTable.status,
     rejectionReason: candidatesTable.rejectionReason,
     reviewedAt: candidatesTable.reviewedAt,
     createdAt: candidatesTable.createdAt
-  }).from(candidatesTable).leftJoin(pollsTable, eq(candidatesTable.pollId, pollsTable.id)).leftJoin(pollSeatsTable, eq(candidatesTable.seatId, pollSeatsTable.id)).leftJoin(usersTable2, eq(candidatesTable.userId, usersTable2.id)).where(and(eq(candidatesTable.status, "rejected"))).orderBy(desc(candidatesTable.createdAt));
+  }).from(candidatesTable).leftJoin(pollsTable, eq(candidatesTable.pollId, pollsTable.id)).leftJoin(pollSeatsTable, eq(candidatesTable.seatId, pollSeatsTable.id)).leftJoin(usersTable, eq(candidatesTable.userId, usersTable.id)).where(and(eq(candidatesTable.status, "rejected"))).orderBy(desc(candidatesTable.createdAt));
   const withDocs = await Promise.all(
     rows.map(async (r) => {
       const docs = await db.select().from(candidateDocumentsTable).where(eq(candidateDocumentsTable.candidateId, r.id));
@@ -52662,7 +52753,7 @@ async function resetAdminPassword(req, res) {
     res.status(400).json({ message: "newPassword must be at least 8 characters" });
     return;
   }
-  await db.update(usersTable2).set({ passwordHash: await hashPassword(newPassword) }).where(eq(usersTable2.id, userId));
+  await db.update(usersTable).set({ passwordHash: await hashPassword(newPassword) }).where(eq(usersTable.id, userId));
   await audit({
     action: "admin.reset_password",
     actorEmail: req.user.email,
@@ -52717,9 +52808,9 @@ var routes_default = router8;
 
 // src/app.ts
 var app = (0, import_express9.default)();
-var __filename2 = fileURLToPath2(import.meta.url);
-var __dirname3 = path2.dirname(__filename2);
-var UPLOADS_DIR2 = path2.resolve(__dirname3, "..", "uploads");
+var __filename = fileURLToPath(import.meta.url);
+var __dirname2 = path2.dirname(__filename);
+var UPLOADS_DIR2 = path2.resolve(__dirname2, "..", "uploads");
 app.use(
   (0, import_pino_http.pinoHttp)({
     logger,
@@ -52761,9 +52852,9 @@ async function seedCatalog() {
       for (const s of SCHOOLS_SEED) {
         await tx.insert(schoolsTable).values({ id: s.id, name: s.name }).onConflictDoNothing();
         for (const d of s.departments) {
-          await db.insert(departmentsTable2).values({ id: d.id, schoolId: s.id, name: d.name }).onConflictDoNothing();
+          await db.insert(departmentsTable).values({ id: d.id, schoolId: s.id, name: d.name }).onConflictDoNothing();
           for (const c of d.courses) {
-            await tx.insert(coursesTable2).values({
+            await tx.insert(coursesTable).values({
               id: c.id,
               departmentId: d.id,
               name: c.name,
@@ -52782,13 +52873,13 @@ async function seedCatalog() {
     }
   }
   const adminEmail = "admin@ku.ac.ke";
-  const existingAdmin = await db.select().from(usersTable2).where(eq(usersTable2.email, adminEmail)).limit(1);
+  const existingAdmin = await db.select().from(usersTable).where(eq(usersTable.email, adminEmail)).limit(1);
   if (!existingAdmin[0]) {
     logger.info("Seeding default admin ...");
     const initialPassword = process.env.INITIAL_ADMIN_PASSWORD;
     if (!initialPassword)
       throw new Error("INITIAL_ADMIN_PASSWORD must be set for seeding");
-    await db.insert(usersTable2).values({
+    await db.insert(usersTable).values({
       name: "KUVOTE Administrator",
       email: adminEmail,
       passwordHash: await hashPassword(initialPassword),
@@ -52834,7 +52925,7 @@ var studentRecordsTable2 = pgTable("student_records", {
   feeBalance: numeric("fee_balance", { precision: 10, scale: 2 }).notNull().default("0.00"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
-var usersTable3 = pgTable("users", {
+var usersTable2 = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
@@ -52861,12 +52952,12 @@ var schoolsTable2 = pgTable("schools", {
   id: text("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull()
 });
-var departmentsTable3 = pgTable("departments", {
+var departmentsTable2 = pgTable("departments", {
   id: text("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   schoolId: text("school_id").notNull()
 });
-var coursesTable3 = pgTable("courses", {
+var coursesTable2 = pgTable("courses", {
   id: text("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   departmentId: text("department_id").notNull(),
@@ -52977,9 +53068,9 @@ export {
   ballotTokensTable2 as ballotTokensTable,
   candidateDocumentsTable2 as candidateDocumentsTable,
   candidatesTable2 as candidatesTable,
-  coursesTable3 as coursesTable,
+  coursesTable2 as coursesTable,
   db2 as db,
-  departmentsTable3 as departmentsTable,
+  departmentsTable2 as departmentsTable,
   electionApplicationSettingsTable2 as electionApplicationSettingsTable,
   endorsementsTable2 as endorsementsTable,
   hostelsTable2 as hostelsTable,
@@ -52989,7 +53080,7 @@ export {
   pool2 as pool,
   schoolsTable2 as schoolsTable,
   studentRecordsTable2 as studentRecordsTable,
-  usersTable3 as usersTable,
+  usersTable2 as usersTable,
   votesTable2 as votesTable
 };
 /*! Bundled license information:

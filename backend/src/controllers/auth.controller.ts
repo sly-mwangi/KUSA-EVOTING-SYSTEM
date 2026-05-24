@@ -8,9 +8,9 @@ import {
   loadUserProfile,
   signToken,
   verifyPassword,
-} from "../lib/auth";
-import { isEmailConfigured, sendOtpEmail } from "../lib/email";
-import { audit } from "../lib/audit";
+} from "../lib/auth.js";
+import { isEmailConfigured, sendOtpEmail } from "../lib/email.js";
+import { audit } from "../lib/audit.js";
 
 const REG_NUMBER_REGEX = /^[A-Z]+\d+[A-Z]?\/\d+\/\d{4}$/;
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -54,7 +54,7 @@ async function issueOtp(
   } catch {
     // swallow
   }
-  return { code, devOtp: isEmailConfigured() ? null : code };
+  return { code };
 }
 
 async function consumeOtp(
@@ -97,12 +97,10 @@ export async function prefillRegistration(req: Request, res: Response) {
     return;
   }
   if (!REG_NUMBER_REGEX.test(regNumberParam)) {
-    res
-      .status(400)
-      .json({
-        message:
-          "Invalid registration number format. Expected J31/4338/2022 or J31S/4338/2022",
-      });
+    res.status(400).json({
+      message:
+        "Invalid registration number format. Expected J31/4338/2022 or J31S/4338/2022",
+    });
     return;
   }
 
@@ -168,12 +166,10 @@ export async function register(req: Request, res: Response) {
   const regNo = registrationNumber.trim().toUpperCase();
 
   if (!REG_NUMBER_REGEX.test(regNo)) {
-    res
-      .status(400)
-      .json({
-        message:
-          "Registration number must be in the format J31/4338/2022 or J31S/4338/2022",
-      });
+    res.status(400).json({
+      message:
+        "Registration number must be in the format J31/4338/2022 or J31S/4338/2022",
+    });
     return;
   }
 
@@ -226,12 +222,10 @@ export async function register(req: Request, res: Response) {
   const existing = existingRows[0];
 
   if (existing?.status === "active") {
-    res
-      .status(409)
-      .json({
-        message:
-          "An account with this registration number already exists. Please sign in.",
-      });
+    res.status(409).json({
+      message:
+        "An account with this registration number already exists. Please sign in.",
+    });
     return;
   }
 
@@ -278,7 +272,6 @@ export async function register(req: Request, res: Response) {
   res.status(201).json({
     message: "Verification code sent to your university email",
     email,
-    devOtp: otp.devOtp,
   });
 }
 
@@ -331,8 +324,8 @@ export async function resendOtp(req: Request, res: Response) {
   const purposeBody = (req.body?.purpose ?? "registration") as
     | "registration"
     | "password_reset";
-  const otp = await issueOtp(email, purposeBody);
-  res.json({ message: "Code sent", devOtp: otp.devOtp });
+  await issueOtp(email, purposeBody);
+  res.json({ message: "Code sent" });
 }
 
 export async function login(req: Request, res: Response) {
@@ -376,12 +369,10 @@ export async function login(req: Request, res: Response) {
     return;
   }
   if (user.status === "disabled") {
-    res
-      .status(403)
-      .json({
-        message:
-          "Your account has been disabled. Contact the Electoral Commission.",
-      });
+    res.status(403).json({
+      message:
+        "Your account has been disabled. Contact the Electoral Commission.",
+    });
     return;
   }
   if (user.registrationExpiresAt && user.registrationExpiresAt < new Date()) {
@@ -403,13 +394,11 @@ export async function login(req: Request, res: Response) {
     const student = studentRows[0];
     if (student) {
       const feeBalance = parseFloat(student.feeBalance ?? "0");
-      if (feeBalance > 0) {
-        res.status(403).json({
-          message: `Access denied. Your fee balance of KES ${feeBalance.toLocaleString()} is not cleared. Please visit the Finance Office.`,
-          code: "FEE_NOT_CLEARED",
-        });
-        return;
-      }
+      const feeStatus = feeBalance === 0 ? "cleared" : "outstanding";
+      await db
+        .update(usersTable)
+        .set({ feeStatus })
+        .where(eq(usersTable.id, user.id));
     }
   }
 
@@ -473,18 +462,17 @@ export async function forgotPassword(req: Request, res: Response) {
   if (!userRows[0]) {
     res.json({
       message: "If an account exists, a code has been sent",
-      devOtp: null,
     });
     return;
   }
-  const otp = await issueOtp(email, "password_reset");
+  await issueOtp(email, "password_reset");
   await audit({
     action: "user.forgot_password",
     actorEmail: email,
     actorRole: "student",
     target: email,
   });
-  res.json({ message: "Reset code sent", devOtp: otp.devOtp });
+  res.json({ message: "Reset code sent" });
 }
 
 export async function resetPassword(req: Request, res: Response) {
