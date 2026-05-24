@@ -237,7 +237,7 @@ export async function register(req: Request, res: Response) {
       .update(usersTable)
       .set({
         name: student.name,
-        passwordHash: hashPassword(password),
+        passwordHash: await hashPassword(password),
         gender: student.gender,
         courseId: student.courseId,
         hostelId: chosenHostel,
@@ -250,7 +250,7 @@ export async function register(req: Request, res: Response) {
     await db.insert(usersTable).values({
       name: student.name,
       email,
-      passwordHash: hashPassword(password),
+      passwordHash: await hashPassword(password),
       role: "student",
       status: "pending_otp",
       gender: student.gender,
@@ -360,7 +360,7 @@ export async function login(req: Request, res: Response) {
     res.status(401).json({ message: "Invalid credentials" });
     return;
   }
-  if (!verifyPassword(password, user.passwordHash)) {
+  if (!(await verifyPassword(password, user.passwordHash))) {
     res.status(401).json({ message: "Invalid credentials" });
     return;
   }
@@ -433,7 +433,7 @@ export async function adminLogin(req: Request, res: Response) {
     res.status(401).json({ message: "Invalid admin credentials" });
     return;
   }
-  if (!verifyPassword(password, user.passwordHash)) {
+  if (!(await verifyPassword(password, user.passwordHash))) {
     res.status(401).json({ message: "Invalid admin credentials" });
     return;
   }
@@ -499,7 +499,7 @@ export async function resetPassword(req: Request, res: Response) {
   }
   await db
     .update(usersTable)
-    .set({ passwordHash: hashPassword(newPassword) })
+    .set({ passwordHash: await hashPassword(newPassword) })
     .where(eq(usersTable.email, email));
   await audit({
     action: "user.reset_password",

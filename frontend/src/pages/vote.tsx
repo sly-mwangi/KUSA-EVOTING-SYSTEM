@@ -61,8 +61,11 @@ export default function VotePage() {
   });
   const cast = useCastVote();
   const [selections, setSelections] = useState<Record<string, string>>({});
+  const [selectedSlateId, setSelectedSlateId] = useState<string>("");
   const [submitted, setSubmitted] = useState(false);
   const [feeBlocked, setFeeBlocked] = useState(false);
+
+  const isSGC = (poll as any)?.pollType === "sgc";
 
   const eligibleSeats = useMemo(
     () =>
@@ -86,22 +89,34 @@ export default function VotePage() {
   }
 
   const onSubmit = async () => {
-    const entries = Object.entries(selections);
-    if (entries.length === 0) {
-      toast.error("Pick at least one candidate before submitting");
-      return;
+    if (isSGC) {
+      if (!selectedSlateId) {
+        toast.error("Please select a group to vote for");
+        return;
+      }
+    } else {
+      const entries = Object.entries(selections);
+      if (entries.length === 0) {
+        toast.error("Pick at least one candidate before submitting");
+        return;
+      }
     }
+
     setFeeBlocked(false);
     try {
       await cast.mutateAsync({
         pollId,
-        data: {
-          selections: entries.map(([seatId, candidateId]) => ({
-            seatId,
-            candidateId,
-            encryptedPayload: encryptedPayload(seatId, candidateId),
-          })),
-        } as any,
+        data: isSGC
+          ? { slateId: selectedSlateId }
+          : ({
+              selections: Object.entries(selections).map(
+                ([seatId, candidateId]) => ({
+                  seatId,
+                  candidateId,
+                  encryptedPayload: encryptedPayload(seatId, candidateId),
+                }),
+              ),
+            } as any),
       });
       setSubmitted(true);
       toast.success("Your vote has been recorded successfully");
@@ -204,7 +219,119 @@ export default function VotePage() {
         </Alert>
       </div>
 
-      {eligibleSeats.length === 0 ? (
+      {isSGC ? (
+        <div className="grid max-w-3xl gap-6">
+          {((poll as any).slates ?? []).map((slate: any, idx: number) => (
+            <motion.div
+              key={slate.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: idx * 0.05 }}
+            >
+              <Card
+                className={`border-border/80 transition-all ${selectedSlateId === slate.id ? "border-primary bg-primary/5 shadow-md" : "hover:border-primary/40"}`}
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-2xl">{slate.name}</CardTitle>
+                      {slate.slogan && (
+                        <CardDescription className="text-primary font-medium italic mt-1">
+                          "{slate.slogan}"
+                        </CardDescription>
+                      )}
+                    </div>
+                    <RadioGroup
+                      value={selectedSlateId}
+                      onValueChange={setSelectedSlateId}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem
+                          value={slate.id}
+                          id={`slate-${slate.id}`}
+                        />
+                        <Label
+                          htmlFor={`slate-${slate.id}`}
+                          className="font-bold text-lg cursor-pointer"
+                        >
+                          Vote for Group
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                      Group Members
+                    </h3>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {slate.members.map((m: any) => (
+                        <div
+                          key={m.userId}
+                          className="flex items-center gap-3 rounded-md border bg-background p-3"
+                        >
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                              {m.name?.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="text-sm font-bold">{m.name}</div>
+                            <div className="text-[10px] text-muted-foreground uppercase">
+                              {m.seatLabel || m.role}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {slate.manifesto && (
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                        Group Manifesto
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {slate.manifesto}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+          <div className="sticky bottom-4 z-10 rounded-xl border border-border bg-background/95 p-4 shadow-lg backdrop-blur">
+            <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+              <div className="flex items-center gap-2 text-sm">
+                <Lock className="h-4 w-4 text-primary" />
+                <span>
+                  {selectedSlateId ? "Group selected" : "No group selected"}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/dashboard")}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={onSubmit}
+                  disabled={cast.isPending || !selectedSlateId}
+                  className="gap-2 px-6"
+                >
+                  {cast.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Vote className="h-4 w-4" />
+                  )}
+                  Cast Group Vote
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : eligibleSeats.length === 0 ? (
         <Card className="max-w-3xl">
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
             There are no seats currently open for you to vote on in this poll.
@@ -246,7 +373,6 @@ export default function VotePage() {
                         return (
                           <Label
                             key={c.id}
-                            data-testid={`candidate-${c.id}`}
                             htmlFor={`${seat.id}-${c.id}`}
                             className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-all ${checked ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/40"}`}
                           >
@@ -316,7 +442,6 @@ export default function VotePage() {
                   Cancel
                 </Button>
                 <Button
-                  data-testid="vote-btn"
                   onClick={onSubmit}
                   disabled={cast.isPending}
                   className="gap-2 px-6"

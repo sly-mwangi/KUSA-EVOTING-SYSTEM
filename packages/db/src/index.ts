@@ -21,7 +21,9 @@ export const pool = new Pool({ connectionString: DATABASE_URL });
 export const db = drizzle(pool);
 
 export const studentRecordsTable = pgTable("student_records", {
-  registrationNumber: varchar("registration_number", { length: 50 }).primaryKey(),
+  registrationNumber: varchar("registration_number", {
+    length: 50,
+  }).primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   gender: varchar("gender", { length: 10 }).notNull(),
@@ -30,8 +32,12 @@ export const studentRecordsTable = pgTable("student_records", {
   courseId: text("course_id").notNull(),
   hostelId: text("hostel_id"),
   yearOfStudy: integer("year_of_study").notNull().default(1),
-  feeBalance: numeric("fee_balance", { precision: 10, scale: 2 }).notNull().default("0.00"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  feeBalance: numeric("fee_balance", { precision: 10, scale: 2 })
+    .notNull()
+    .default("0.00"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 export const usersTable = pgTable("users", {
@@ -47,7 +53,9 @@ export const usersTable = pgTable("users", {
   registrationNumber: varchar("registration_number", { length: 50 }),
   registrationExpiresAt: timestamp("registration_expires_at"),
   feeStatus: varchar("fee_status", { length: 20 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 export const otpsTable = pgTable("otps", {
@@ -93,7 +101,9 @@ export const pollsTable = pgTable("polls", {
   endDate: timestamp("end_date").notNull(),
   locked: boolean("locked").notNull().default(false),
   createdBy: uuid("created_by").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 export const pollSeatsTable = pgTable("poll_seats", {
@@ -120,7 +130,9 @@ export const candidatesTable = pgTable("candidates", {
   rejectionReason: text("rejection_reason"),
   reviewedBy: uuid("reviewed_by"),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 export const candidateDocumentsTable = pgTable("candidate_documents", {
@@ -128,21 +140,30 @@ export const candidateDocumentsTable = pgTable("candidate_documents", {
   candidateId: uuid("candidate_id").notNull(),
   documentName: varchar("document_name", { length: 255 }).notNull(),
   documentUrl: text("document_url").notNull(),
-  documentType: varchar("document_type", { length: 100 }).notNull().default("document"),
-  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow().notNull(),
+  documentType: varchar("document_type", { length: 100 })
+    .notNull()
+    .default("document"),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
-export const electionApplicationSettingsTable = pgTable("election_application_settings", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  pollId: uuid("poll_id").notNull().unique(),
-  isOpen: boolean("is_open").notNull().default(false),
-  openAt: timestamp("open_at", { withTimezone: true }),
-  closeAt: timestamp("close_at", { withTimezone: true }),
-  timerDurationMinutes: integer("timer_duration_minutes"),
-  openedBy: uuid("opened_by"),
-  closedBy: uuid("closed_by"),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const electionApplicationSettingsTable = pgTable(
+  "election_application_settings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    pollId: uuid("poll_id").notNull().unique(),
+    isOpen: boolean("is_open").notNull().default(false),
+    openAt: timestamp("open_at", { withTimezone: true }),
+    closeAt: timestamp("close_at", { withTimezone: true }),
+    timerDurationMinutes: integer("timer_duration_minutes"),
+    openedBy: uuid("opened_by"),
+    closedBy: uuid("closed_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+);
 
 export const endorsementsTable = pgTable("endorsements", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -155,6 +176,7 @@ export const ballotTokensTable = pgTable("ballot_tokens", {
   id: uuid("id").defaultRandom().primaryKey(),
   pollId: uuid("poll_id").notNull(),
   seatId: uuid("seat_id").notNull(),
+  slateId: uuid("slate_id"),
   userId: uuid("user_id").notNull(),
   tokenHash: text("token_hash").notNull(),
   used: boolean("used").notNull().default(false),
@@ -165,7 +187,8 @@ export const votesTable = pgTable("votes", {
   id: uuid("id").defaultRandom().primaryKey(),
   pollId: uuid("poll_id").notNull(),
   seatId: uuid("seat_id").notNull(),
-  candidateId: uuid("candidate_id").notNull(),
+  candidateId: uuid("candidate_id"),
+  slateId: uuid("slate_id"),
   encryptedPayload: text("encrypted_payload").notNull(),
   ballotHash: text("ballot_hash").notNull(),
   tokenHash: text("token_hash").notNull(),
@@ -180,5 +203,27 @@ export const auditLogTable = pgTable("audit_log", {
   target: varchar("target", { length: 255 }),
   details: text("details"),
   ipAddress: varchar("ip_address", { length: 45 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const slatesTable = pgTable("slates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  pollId: uuid("poll_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  slogan: varchar("slogan", { length: 255 }),
+  manifesto: text("manifesto"),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const slateMembersTable = pgTable("slate_members", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  slateId: uuid("slate_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  seatId: uuid("seat_id").notNull(),
+  role: varchar("role", { length: 100 }).notNull(),
 });

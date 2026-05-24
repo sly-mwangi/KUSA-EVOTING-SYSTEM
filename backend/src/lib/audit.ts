@@ -1,5 +1,5 @@
 import { db, auditLogTable } from "@workspace/db";
-import { logger } from "./logger";
+import { logger } from "./logger.js";
 
 export async function audit(entry: {
   action: string;

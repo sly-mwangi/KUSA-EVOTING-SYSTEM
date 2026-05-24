@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pinoHttp } from "pino-http";
@@ -10,6 +11,18 @@ const app: Express = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const UPLOADS_DIR = path.resolve(__dirname, "..", "uploads");
+
+app.set("trust proxy", 1);
+app.use((req, res, next) => {
+  if (
+    process.env.NODE_ENV === "production" &&
+    req.header("x-forwarded-proto") !== "https"
+  ) {
+    res.redirect(301, `https://${req.header("host")}${req.url}`);
+  } else {
+    next();
+  }
+});
 
 app.use(
   pinoHttp({
@@ -24,7 +37,14 @@ app.use(
     },
   }),
 );
-app.use(cors());
+app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+  }),
+);
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 

@@ -7,14 +7,16 @@ import {
   candidatesTable,
   candidateDocumentsTable,
   electionApplicationSettingsTable,
-  votesTable,
   endorsementsTable,
+  votesTable,
   ballotTokensTable,
   auditLogTable,
   schoolsTable,
   departmentsTable,
   coursesTable,
   hostelsTable,
+  slatesTable,
+  slateMembersTable,
 } from "@workspace/db";
 import {
   and,
@@ -28,6 +30,7 @@ import {
 } from "drizzle-orm";
 import { hashPassword } from "../lib/auth.js";
 import { audit } from "../lib/audit.js";
+import { isUserWinnerOfPreviousPoll } from "./polls.controller.js";
 
 export async function getDashboard(_req: Request, res: Response) {
   const now = new Date();
@@ -122,75 +125,206 @@ export async function getAdminPolls(_req: Request, res: Response) {
 }
 
 export async function createPoll(req: Request, res: Response) {
-  const { title, description, pollType, startDate, endDate, seats } =
-    (req.body ?? {}) as {
-      title: string;
-      description?: string;
-      pollType?: string;
-      startDate: string;
-      endDate: string;
-      seats: Array<{
-        code: string;
-        label: string;
-        scope: "school" | "department" | "hostel" | "sgc" | "university";
-        scopeRefId?: string | null;
-        gender?: "male" | "female" | null;
-      }>;
-    };
-  if (
-    !title ||
-    !startDate ||
-    !endDate ||
-    !Array.isArray(seats) ||
-    seats.length === 0
-  ) {
-    res.status(400).json({
-      message: "title, startDate, endDate and at least one seat are required",
+  try {
+    const { title, description, pollType, startDate, endDate, seats, slates } =
+      (req.body ?? {}) as {
+        title: string;
+        description?: string;
+        pollType?: string;
+        startDate: string;
+        endDate: string;
+        seats: Array<{
+          code: string;
+          label: string;
+          scope: "school" | "department" | "hostel" | "sgc" | "university";
+          scopeRefId?: string | null;
+          gender?: "male" | "female" | null;
+        }>;
+        slates?: Array<{
+          name: string;
+          slogan?: string;
+          manifesto?: string;
+          members: Array<{
+            userId: string;
+            seatCode: string;
+            role: string;
+          }>;
+        }>;
+      };
+
+    if (
+      !title ||
+      !startDate ||
+      !endDate ||
+      !Array.isArray(seats) ||
+      seats.length === 0
+    ) {
+      res.status(400).json({
+        message: "title, startDate, endDate and at least one seat are required",
+      });
+      return;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      end <= start
+    ) {
+      res.status(400).json({ message: "Invalid start/end dates" });
+      return;
+    }
+
+    // Pre-validation for SGC poll types to avoid 500 errors and enforce business rules
+    if (pollType === "sgc" && Array.isArray(slates)) {
+      const seenUserIds = new Set<string>();
+      const seatCodesInPoll = new Set(seats.map((s) => s.code));
+
+      for (const slate of slates) {
+        if (!slate.name) {
+          res.status(400).json({ message: "All SGC groups must have a name." });
+          return;
+        }
+        if (!Array.isArray(slate.members) || slate.members.length === 0) {
+          res.status(400).json({
+            message: `Group "${slate.name}" must have at least one member.`,
+          });
+          return;
+        }
+        for (const member of slate.members) {
+          if (!member.userId) {
+            res.status(400).json({
+              message: `A member in group "${slate.name}" is missing a student selection.`,
+            });
+            return;
+          }
+
+          if (seenUserIds.has(member.userId)) {
+            res.status(400).json({
+              message: `Student with ID ${member.userId} is assigned to multiple positions or groups. Each student can only hold one position.`,
+            });
+            return;
+          }
+          seenUserIds.add(member.userId);
+
+          if (!seatCodesInPoll.has(member.seatCode)) {
+            res.status(400).json({
+              message: `Seat code "${member.seatCode}" assigned to member in group "${slate.name}" does not exist in the defined seats for this poll.`,
+            });
+            return;
+          }
+
+          // Verify user exists and is active
+          const userRows = await db
+            .select()
+            .from(usersTable)
+            .where(
+              and(
+                eq(usersTable.id, member.userId),
+                eq(usersTable.status, "active"),
+              ),
+            )
+            .limit(1);
+          if (!userRows[0]) {
+            res.status(400).json({
+              message: `Student with ID ${member.userId} is not found or is not an active student.`,
+            });
+            return;
+          }
+
+          // Enforce SGC Eligibility: Only winners of previous polls can be SGC members
+          const isWinner = await isUserWinnerOfPreviousPoll(member.userId);
+          if (!isWinner) {
+            res.status(400).json({
+              message: `Student "${userRows[0].name}" (ID: ${member.userId}) is not eligible for SGC. Only winners of previous elections can be SGC members.`,
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    // Use a transaction to ensure all-or-nothing creation
+    const result = await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(pollsTable)
+        .values({
+          title,
+          description: description ?? "",
+          pollType: pollType ?? "general",
+          startDate: start,
+          endDate: end,
+          createdBy: req.user!.id,
+        })
+        .returning();
+
+      const poll = inserted[0];
+      const seatMap = new Map<string, string>();
+
+      for (let i = 0; i < seats.length; i++) {
+        const s = seats[i];
+        const sInserted = await tx
+          .insert(pollSeatsTable)
+          .values({
+            pollId: poll.id,
+            code: s.code,
+            label: s.label,
+            scope: s.scope,
+            scopeRefId: s.scopeRefId ?? null,
+            gender: s.gender ?? null,
+            position: i,
+          })
+          .returning();
+        seatMap.set(s.code, sInserted[0].id);
+      }
+
+      if (pollType === "sgc" && Array.isArray(slates)) {
+        for (const slate of slates) {
+          const sInserted = await tx
+            .insert(slatesTable)
+            .values({
+              pollId: poll.id,
+              name: slate.name,
+              slogan: slate.slogan || null,
+              manifesto: slate.manifesto || null,
+              status: "approved",
+            })
+            .returning();
+
+          const slateId = sInserted[0].id;
+          for (const member of slate.members) {
+            const seatId = seatMap.get(member.seatCode);
+            await tx.insert(slateMembersTable).values({
+              slateId,
+              userId: member.userId,
+              seatId: seatId!, // Non-null because of pre-validation
+              role: member.role,
+            });
+          }
+        }
+      }
+      return poll;
     });
-    return;
-  }
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  if (
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(end.getTime()) ||
-    end <= start
-  ) {
-    res.status(400).json({ message: "Invalid start/end dates" });
-    return;
-  }
-  const inserted = await db
-    .insert(pollsTable)
-    .values({
-      title,
-      description: description ?? "",
-      pollType: pollType ?? "general",
-      startDate: start,
-      endDate: end,
-      createdBy: req.user!.id,
-    })
-    .returning();
-  const poll = inserted[0];
-  for (let i = 0; i < seats.length; i++) {
-    const s = seats[i];
-    await db.insert(pollSeatsTable).values({
-      pollId: poll.id,
-      code: s.code,
-      label: s.label,
-      scope: s.scope,
-      scopeRefId: s.scopeRefId ?? null,
-      gender: s.gender ?? null,
-      position: i,
+
+    await audit({
+      action: "admin.create_poll",
+      actorEmail: req.user!.email,
+      actorRole: "admin",
+      target: result.id,
+      details: title,
+    });
+
+    res
+      .status(201)
+      .json({ id: result.id, message: "Poll created successfully" });
+  } catch (error: any) {
+    console.error("Error creating poll:", error);
+    res.status(500).json({
+      message: "Failed to create poll",
+      error: error instanceof Error ? error.message : String(error),
     });
   }
-  await audit({
-    action: "admin.create_poll",
-    actorEmail: req.user!.email,
-    actorRole: "admin",
-    target: poll.id,
-    details: title,
-  });
-  res.status(201).json({ id: poll.id, message: "Poll created" });
 }
 
 export async function updatePoll(req: Request, res: Response) {
@@ -240,7 +374,9 @@ export async function deletePoll(req: Request, res: Response) {
   const id = pollId as string;
 
   try {
- 
+    // We use a manual sequence to ensure all dependencies are cleared
+    // Drizzle transactions can sometimes be tricky with nested subqueries,
+    // so we'll do it step-by-step with explicit ID fetching.
 
     // 1. Get all candidate IDs for this poll
     const candidates = await db
@@ -788,6 +924,51 @@ export async function getElectionResultsReport(_req: Request, res: Response) {
     polls.map(async (p) => {
       const status =
         now < p.startDate ? "upcoming" : now > p.endDate ? "closed" : "active";
+
+      if (p.pollType === "sgc") {
+        const slates = await db
+          .select()
+          .from(slatesTable)
+          .where(eq(slatesTable.pollId, p.id));
+
+        const slateCounts = await Promise.all(
+          slates.map(async (s) => {
+            const r = await db
+              .select({ n: count() })
+              .from(votesTable)
+              .where(
+                and(eq(votesTable.pollId, p.id), eq(votesTable.slateId, s.id)),
+              );
+            return { id: s.id, name: s.name, votes: Number(r[0]?.n ?? 0) };
+          }),
+        );
+
+        const total = slateCounts.reduce((a, c) => a + c.votes, 0);
+        return {
+          pollId: p.id,
+          pollTitle: p.title,
+          pollType: p.pollType,
+          status,
+          startDate: p.startDate.toISOString(),
+          endDate: p.endDate.toISOString(),
+          totalVotes: total,
+          results: slateCounts.map((c) => ({
+            ...c,
+            percentage:
+              total > 0 ? Math.round((c.votes / total) * 1000) / 10 : 0,
+            rank: slateCounts.filter((x) => x.votes > c.votes).length + 1,
+          })),
+          winner:
+            total > 0
+              ? slateCounts.reduce(
+                  (best, current) =>
+                    current.votes > best.votes ? current : best,
+                  slateCounts[0],
+                )
+              : null,
+        };
+      }
+
       const seats = await db
         .select()
         .from(pollSeatsTable)

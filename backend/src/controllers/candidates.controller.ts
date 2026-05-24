@@ -11,11 +11,14 @@ import {
   electionApplicationSettingsTable,
   usersTable,
   coursesTable,
-  departmentsTable,
   votesTable,
+  departmentsTable,
+  slatesTable,
+  slateMembersTable,
 } from "@workspace/db";
-import { and, desc, eq, count } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { audit } from "../lib/audit.js";
+import { isUserWinnerOfPreviousPoll } from "./polls.controller.js";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -36,7 +39,7 @@ export async function applyCandidate(req: Request, res: Response) {
   const pollRows = await db
     .select()
     .from(pollsTable)
-    .where(eq(pollsTable.id, pollId as string))
+    .where(eq(pollsTable.id, pollId))
     .limit(1);
   const poll = pollRows[0];
   if (!poll) {
@@ -46,7 +49,7 @@ export async function applyCandidate(req: Request, res: Response) {
   const appSettings = await db
     .select()
     .from(electionApplicationSettingsTable)
-    .where(eq(electionApplicationSettingsTable.pollId, pollId as string))
+    .where(eq(electionApplicationSettingsTable.pollId, pollId))
     .limit(1);
   const settings = appSettings[0];
   if (!settings || !settings.isOpen) {
@@ -60,7 +63,7 @@ export async function applyCandidate(req: Request, res: Response) {
     await db
       .update(electionApplicationSettingsTable)
       .set({ isOpen: false })
-      .where(eq(electionApplicationSettingsTable.pollId, pollId as string));
+      .where(eq(electionApplicationSettingsTable.pollId, pollId));
     res.status(400).json({ message: "The application window has expired." });
     return;
   }
@@ -68,10 +71,7 @@ export async function applyCandidate(req: Request, res: Response) {
     .select()
     .from(pollSeatsTable)
     .where(
-      and(
-        eq(pollSeatsTable.id, seatId as string),
-        eq(pollSeatsTable.pollId, pollId as string),
-      ),
+      and(eq(pollSeatsTable.id, seatId), eq(pollSeatsTable.pollId, pollId)),
     )
     .limit(1);
   const seat = seatRows[0];
@@ -135,77 +135,22 @@ export async function applyCandidate(req: Request, res: Response) {
     .from(candidatesTable)
     .where(
       and(
-        eq(candidatesTable.seatId, seatId),
+        eq(candidatesTable.pollId, pollId),
         eq(candidatesTable.userId, req.user!.id),
       ),
     )
     .limit(1);
   if (exists[0]) {
-    res.status(409).json({ message: "You have already applied for this seat" });
+    res.status(409).json({
+      message:
+        "You have already applied for a seat in this poll. You can only hold one position.",
+    });
     return;
   }
 
   // SGC Eligibility Check: Only winners of other polls can participate in SGC elections
   if (poll.pollType === "sgc") {
-    // 1. Find all closed polls (excluding current)
-    const closedPolls = await db
-      .select({ id: pollsTable.id })
-      .from(pollsTable)
-      .where(and(eq(pollsTable.locked, true), desc(pollsTable.endDate)));
-
-    let isWinner = false;
-    for (const p of closedPolls) {
-      // 2. Get results for each closed poll
-      const seats = await db
-        .select({ id: pollSeatsTable.id })
-        .from(pollSeatsTable)
-        .where(eq(pollSeatsTable.pollId, p.id));
-
-      for (const s of seats) {
-        const candidates = await db
-          .select({ id: candidatesTable.id, userId: candidatesTable.userId })
-          .from(candidatesTable)
-          .where(
-            and(
-              eq(candidatesTable.seatId, s.id),
-              eq(candidatesTable.status, "approved"),
-            ),
-          );
-
-        const counts = await Promise.all(
-          candidates.map(async (c) => {
-            const r = await db
-              .select({ n: count() })
-              .from(votesTable)
-              .where(
-                and(
-                  eq(votesTable.seatId, s.id),
-                  eq(votesTable.candidateId, c.id),
-                ),
-              );
-            return {
-              id: c.id,
-              userId: c.userId,
-              votes: Number(r[0]?.n ?? 0),
-            };
-          }),
-        );
-
-        const winner = counts.length
-          ? counts.reduce(
-              (best, c) => (c.votes > best.votes ? c : best),
-              counts[0],
-            )
-          : null;
-
-        if (winner && winner.votes > 0 && winner.userId === req.user!.id) {
-          isWinner = true;
-          break;
-        }
-      }
-      if (isWinner) break;
-    }
-
+    const isWinner = await isUserWinnerOfPreviousPoll(req.user!.id);
     if (!isWinner) {
       res.status(403).json({
         message:
@@ -241,7 +186,12 @@ export async function applyCandidate(req: Request, res: Response) {
 export async function uploadCandidateDocument(req: Request, res: Response) {
   const { candidateId } = req.params;
   const { documentName, documentType, fileData, fileName } = (req.body ??
-    {}) as Record<string, string>;
+    {}) as {
+    documentName: string;
+    documentType?: string;
+    fileData: string;
+    fileName: string;
+  };
   if (!documentName || !fileData || !fileName) {
     res
       .status(400)
@@ -272,9 +222,9 @@ export async function uploadCandidateDocument(req: Request, res: Response) {
     .insert(candidateDocumentsTable)
     .values({
       candidateId: candidateId as string,
-      documentName: documentName as string,
+      documentName,
       documentUrl,
-      documentType: (documentType as string) ?? "document",
+      documentType: documentType ?? "document",
     })
     .returning();
 
@@ -290,7 +240,7 @@ export async function uploadCandidateDocument(req: Request, res: Response) {
     actorEmail: req.user!.email,
     actorRole: "student",
     target: candidateId as string,
-    details: documentName as string,
+    details: documentName,
   });
   res
     .status(201)
@@ -368,7 +318,7 @@ export async function endorseCandidate(req: Request, res: Response) {
     .from(endorsementsTable)
     .where(
       and(
-        eq(endorsementsTable.seatId, candidate.seatId as string),
+        eq(endorsementsTable.seatId, candidate.seatId),
         eq(endorsementsTable.voterId, req.user!.id),
       ),
     )
@@ -394,7 +344,7 @@ export async function endorseCandidate(req: Request, res: Response) {
 }
 
 export async function getApplicationSettings(req: Request, res: Response) {
-  const { pollId } = req.params;
+  const pollId = req.params.pollId as string;
   const rows = await db
     .select()
     .from(electionApplicationSettingsTable)
@@ -419,4 +369,81 @@ export async function getApplicationSettings(req: Request, res: Response) {
     closeAt: r.closeAt?.toISOString() ?? null,
     timerDurationMinutes: r.timerDurationMinutes ?? null,
   });
+}
+
+export async function createSlate(req: Request, res: Response) {
+  const { pollId, name, slogan, manifesto, members } = req.body as {
+    pollId: string;
+    name: string;
+    slogan?: string;
+    manifesto?: string;
+    members: Array<{ userId: string; seatId: string; role: string }>;
+  };
+
+  if (!pollId || !name || !members || members.length === 0) {
+    res.status(400).json({ message: "pollId, name and members are required" });
+    return;
+  }
+
+  const pollRows = await db
+    .select()
+    .from(pollsTable)
+    .where(eq(pollsTable.id, pollId))
+    .limit(1);
+  const poll = pollRows[0];
+  if (!poll || poll.pollType !== "sgc") {
+    res.status(400).json({ message: "Invalid poll for slate formation" });
+    return;
+  }
+
+  // Any registered voter can be a member of the SGC group.
+  // We just need to verify that the users exist and are active.
+  // SGC Group Eligibility: All members must be winners of previous elections.
+  for (const m of members) {
+    const userRows = await db
+      .select()
+      .select({ name: usersTable.name })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, m.userId), eq(usersTable.status, "active")))
+      .limit(1);
+
+    if (!userRows[0]) {
+      res.status(400).json({
+        message: `Member with ID ${m.userId} is not a valid active student.`,
+      });
+      return;
+    }
+
+    const isWinner = await isUserWinnerOfPreviousPoll(m.userId);
+    if (!isWinner) {
+      res.status(403).json({
+        message: `Student "${userRows[0].name}" is not eligible for SGC. Only winners of previous elections can be part of an SGC group.`,
+      });
+      return;
+    }
+  }
+
+  const [slate] = await db
+    .insert(slatesTable)
+    .values({
+      pollId,
+      name,
+      slogan,
+      manifesto,
+      status: "approved",
+    })
+    .returning();
+
+  await Promise.all(
+    members.map((m) =>
+      db.insert(slateMembersTable).values({
+        slateId: slate.id,
+        userId: m.userId,
+        seatId: m.seatId,
+        role: m.role,
+      }),
+    ),
+  );
+
+  res.status(201).json({ id: slate.id, message: "Slate created successfully" });
 }
