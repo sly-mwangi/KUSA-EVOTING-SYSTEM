@@ -65,7 +65,7 @@ export default function StudentLoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full bg-gradient-to-br from-secondary via-background to-background flex flex-col">
+    <div className="relative min-h-screen w-full bg-linear-to-br from-secondary via-background to-background flex flex-col">
       <header className="container mx-auto flex items-center justify-between p-4">
         <Brand />
         <ThemeToggle />
